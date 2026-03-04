@@ -1,4 +1,4 @@
-module smart-meter-simulator
+module github.com/msc-privacy-grid-mpc-zkp/smart-meter-simulator
 
 go 1.24.0
 
