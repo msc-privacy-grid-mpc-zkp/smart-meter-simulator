@@ -1,0 +1,12 @@
+# Mrežna podešavanja
+cloud_url: "http://localhost:8080/api/proofs"
+
+# Parametri simulacije
+meter_count: 10          # Koliko ukupno brojila simuliramo
+worker_pool_size: 4      # Koliko paralelnih procesa generiše dokaze (stavi broj jezgara tvog procesora)
+interval_seconds: 5      # Na koliko sekundi brojila šalju podatke
+
+# Parametri potrošnje
+base_load: 500           # Bazna potrošnja u vatima
+variance: 2000           # Maksimalno odstupanje u vatima
+max_limit: 10000         # Hardverski limit priključka
