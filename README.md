@@ -28,3 +28,7 @@ This proof cryptographically guarantees that the power consumption is strictly p
    ```bash
    git clone [https://github.com/msc-privacy-grid-mpc-zkp/smart-meter-simulator.git](https://github.com/msc-privacy-grid-mpc-zkp/smart-meter-simulator.git)
    cd smart-meter-simulator
+
+3. **Run the simulation:**
+   ```bash
+   go run cmd/simulator/main.go
