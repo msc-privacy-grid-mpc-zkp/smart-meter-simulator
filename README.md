@@ -26,7 +26,7 @@ This proof cryptographically guarantees that the power consumption is strictly p
 
 1. **Clone the repository:**
    ```bash
-   git clone [https://github.com/msc-privacy-grid-mpc-zkp/smart-meter-simulator.git](https://github.com/msc-privacy-grid-mpc-zkp/smart-meter-simulator.git)
+   git clone https://github.com/msc-privacy-grid-mpc-zkp/smart-meter-simulator.git
    cd smart-meter-simulator
 
 1. **Install dependencies:**
@@ -61,7 +61,7 @@ Umesto da šalje sirove, osetljive podatke u cloud, svako brojilo računa **Zero
 
 1. **Kloniranje repozitorijuma:**
    ```bash
-   git clone [https://github.com/msc-privacy-grid-mpc-zkp/smart-meter-simulator.git](https://github.com/msc-privacy-grid-mpc-zkp/smart-meter-simulator.git)
+   git clone https://github.com/msc-privacy-grid-mpc-zkp/smart-meter-simulator.git
    cd smart-meter-simulator
 
 1. **Instalacija zavisnosti:**
