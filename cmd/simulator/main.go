@@ -3,76 +3,109 @@ package main
 import (
 	"fmt"
 	"log"
+	"sync"
 	"time"
 
+	"github.com/msc-privacy-grid-mpc-zkp/smart-meter-simulator/internal/config"
 	"github.com/msc-privacy-grid-mpc-zkp/smart-meter-simulator/internal/meter"
 	"github.com/msc-privacy-grid-mpc-zkp/smart-meter-simulator/internal/network"
 	"github.com/msc-privacy-grid-mpc-zkp/smart-meter-simulator/internal/zkp"
 )
 
-func main() {
-	fmt.Println("⚡ Starting Smart Meter Edge Simulator...")
-	fmt.Println("------------------------------------------------")
+// Job represents a task for the ZKP worker (a single reading to be proven and sent)
+type Job struct {
+	MeterID string
+	Reading meter.Reading
+}
 
-	fmt.Println("[1/4] Initializing ZKP Engine (Trusted Setup)...")
-	setupStartTime := time.Now()
+func main() {
+	fmt.Println("⚡ Starting Edge Simulator with Worker Pool architecture...")
+	fmt.Println("---------------------------------------------------------")
+
+	// 1. Load configuration
+	cfg, err := config.LoadConfig("config.yaml")
+	if err != nil {
+		log.Fatalf("Fatal error loading configuration: %v", err)
+	}
+	fmt.Printf("[CONFIG] Loaded: %d meters | %d workers | Interval: %ds\n",
+		cfg.MeterCount, cfg.WorkerPoolSize, cfg.IntervalSeconds)
+
+	// 2. ZKP Setup (Done strictly once for the entire network - saves RAM and CPU)
+	fmt.Println("[SETUP] Initializing ZKP Engine...")
 	zkpEngine, err := zkp.Setup()
 	if err != nil {
-		log.Fatalf("Fatal error during ZKP setup: %v", err)
-	}
-	fmt.Printf("      [OK] Setup completed in %v\n", time.Since(setupStartTime))
-
-	fmt.Println("[2/4] Initializing Smart Meter Sensor...")
-	myMeter := meter.NewSimulatedMeter(500, 2000)
-	meterID := "meter-RS-001"
-	const maxLimit uint64 = 10000
-
-	fmt.Println("[3/4] Initializing Network Client...")
-
-	cloudURL := "http://localhost:8080/api/proofs"
-	apiClient := network.NewCloudClient(cloudURL)
-	fmt.Printf("      [OK] Client configured for %s\n", cloudURL)
-
-	fmt.Println("[4/4] Starting Simulation Loop...")
-	fmt.Println("------------------------------------------------")
-
-	for i := 1; i <= 5; i++ {
-		fmt.Printf("\n--- Cycle %d ---\n", i)
-
-		reading := myMeter.Generate()
-		fmt.Printf("[SENSOR] Time: %d | Consumption: %d W\n", reading.Timestamp, reading.Consumption)
-
-		proofStartTime := time.Now()
-		proof, err := zkpEngine.GenerateProof(reading.Consumption, maxLimit)
-		if err != nil {
-			log.Printf("[ERROR] Failed to generate ZKP proof: %v\n", err)
-			continue
-		}
-		fmt.Printf("[ZKP]    Proof generated successfully in %v\n", time.Since(proofStartTime))
-
-		proofBytes, err := network.SerializeProof(proof)
-		if err != nil {
-			log.Printf("[ERROR] Failed to serialize proof: %v\n", err)
-			continue
-		}
-
-		payload := network.ProofPayload{
-			MeterID:   meterID,
-			Timestamp: reading.Timestamp,
-			Proof:     proofBytes,
-		}
-
-		fmt.Printf("[NETWORK] Sending %d bytes to Cloud...\n", len(proofBytes))
-		err = apiClient.SendProof(payload)
-		if err != nil {
-			log.Printf("[WARNING] Network error (Expected if Cloud is down): %v\n", err)
-		} else {
-			fmt.Println("[SUCCESS] Proof successfully accepted by the MPC Cloud!")
-		}
-
-		time.Sleep(2 * time.Second)
+		log.Fatalf("Fatal ZKP setup error: %v", err)
 	}
 
-	fmt.Println("------------------------------------------------")
-	fmt.Println("Simulation complete. Shutting down Edge node.")
+	// 3. Initialize network client
+	apiClient := network.NewCloudClient(cfg.CloudURL)
+
+	// 4. Create an array of our virtual meters
+	var meters []*meter.SimulatedMeter
+	for i := 1; i <= cfg.MeterCount; i++ {
+		meters = append(meters, meter.NewSimulatedMeter(cfg.BaseLoad, cfg.Variance))
+	}
+
+	// 5. Create a channel for tasks (Queue)
+	// It is buffered so the main loop doesn't block while generating jobs
+	jobs := make(chan Job, cfg.MeterCount*2)
+
+	// 6. Start Workers
+	var wg sync.WaitGroup
+	for w := 1; w <= cfg.WorkerPoolSize; w++ {
+		wg.Add(1)
+		go func(workerID int) {
+			defer wg.Done()
+
+			// Worker continuously listens to the channel and waits for new jobs
+			for job := range jobs {
+				// A. Generate proof
+				proof, err := zkpEngine.GenerateProof(job.Reading.Consumption, cfg.MaxLimit)
+				if err != nil {
+					log.Printf("[Worker %d] Error generating proof for %s: %v\n", workerID, job.MeterID, err)
+					continue
+				}
+
+				// B. Serialize and package
+				proofBytes, _ := network.SerializeProof(proof)
+				payload := network.ProofPayload{
+					MeterID:   job.MeterID,
+					Timestamp: job.Reading.Timestamp,
+					Proof:     proofBytes,
+				}
+
+				// C. Send to Cloud
+				err = apiClient.SendProof(payload)
+				if err != nil {
+					// We expect an error until we set up the Cloud/MPC server
+					log.Printf("[Worker %d] Network error (Expected) for %s: %v\n", workerID, job.MeterID, err)
+				} else {
+					fmt.Printf("[Worker %d] ZKP successfully generated and sent for %s!\n", workerID, job.MeterID)
+				}
+			}
+		}(w)
+	}
+
+	// 7. Main simulation loop (Ticks every X seconds)
+	ticker := time.NewTicker(time.Duration(cfg.IntervalSeconds) * time.Second)
+	defer ticker.Stop()
+
+	fmt.Println("---------------------------------------------------------")
+	fmt.Println("Simulation is active. Press Ctrl+C to stop.")
+
+	for range ticker.C {
+		fmt.Println("\n--- New synchronized reading cycle ---")
+
+		// Iterate through each virtual meter
+		for i, m := range meters {
+			meterID := fmt.Sprintf("meter-RS-%03d", i+1)
+			reading := m.Generate()
+
+			// Send job to the channel (continue immediately, without waiting for the math)
+			jobs <- Job{
+				MeterID: meterID,
+				Reading: reading,
+			}
+		}
+	}
 }
