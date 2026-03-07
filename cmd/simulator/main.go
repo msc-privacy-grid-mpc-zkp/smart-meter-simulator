@@ -18,6 +18,7 @@ type Job struct {
 	Reading meter.Reading
 }
 
+// TODO: Implement gRPC and refactor main.go
 func main() {
 	fmt.Println("⚡ Starting Edge Simulator with Worker Pool architecture...")
 	fmt.Println("---------------------------------------------------------")
