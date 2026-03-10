@@ -70,9 +70,10 @@ func main() {
 				// B. Serialize and package
 				proofBytes, _ := network.SerializeProof(proof)
 				payload := network.ProofPayload{
-					MeterID:   job.MeterID,
-					Timestamp: job.Reading.Timestamp,
-					Proof:     proofBytes,
+					MeterID:    job.MeterID,
+					Timestamp:  job.Reading.Timestamp,
+					MeterShare: job.Reading.Consumption,
+					Proof:      proofBytes,
 				}
 
 				// C. Send to Cloud
