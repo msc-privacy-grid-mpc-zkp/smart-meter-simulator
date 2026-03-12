@@ -1,6 +1,8 @@
 network:
-  cloud_url_a: "http://localhost:8080/api/proofs"
-  cloud_url_b: "http://localhost:8081/api/proofs"
+  cloud_urls:
+    - "http://localhost:8080/api/proofs"
+    - "http://localhost:8081/api/proofs"
+    - "http://localhost:8082/api/proofs"
 
 simulation:
   meter_count: 10

@@ -23,21 +23,19 @@ type Pool struct {
 	wg         *sync.WaitGroup
 	workerSize int
 	maxLimit   uint64
-	zkpEngine  *zkp.Engine // Napomena: Prilagodi tip ako se tvoj struct zove drugačije
-	clientA    *network.CloudClient
-	clientB    *network.CloudClient
+	zkpEngine  *zkp.Engine
+	clients    []*network.CloudClient
 }
 
 // NewPool initializes a new worker pool
-func NewPool(workerSize int, queueSize int, maxLimit uint64, zkpEngine *zkp.Engine, clientA, clientB *network.CloudClient) *Pool {
+func NewPool(workerSize int, queueSize int, maxLimit uint64, zkpEngine *zkp.Engine, clients []*network.CloudClient) *Pool {
 	return &Pool{
 		Jobs:       make(chan Job, queueSize),
 		wg:         &sync.WaitGroup{},
 		workerSize: workerSize,
 		maxLimit:   maxLimit,
 		zkpEngine:  zkpEngine,
-		clientA:    clientA,
-		clientB:    clientB,
+		clients:    clients,
 	}
 }
 
@@ -52,42 +50,50 @@ func (p *Pool) Start() {
 // worker is the actual goroutine function processing the jobs
 func (p *Pool) worker(id int) {
 	defer p.wg.Done()
+	numServers := len(p.clients)
 
 	for job := range p.Jobs {
+		// 1. ZKP Generation
 		proof, err := p.zkpEngine.GenerateProof(job.Reading.Consumption, p.maxLimit)
 		if err != nil {
-			log.Printf("[Worker %d] Error generating proof for %s: %v\n", id, job.MeterID, err)
+			log.Printf("[Worker %d] ZKP Error for %s: %v", id, job.MeterID, err)
 			continue
 		}
 		proofBytes, _ := network.SerializeProof(proof)
-
 		actualConsumption := int64(job.Reading.Consumption)
 
-		share1 := rand.Int63()
-		share2 := actualConsumption - share1
+		// 2. Multi-Party Secret Sharing (N-shares)
+		shares := make([]int64, numServers)
+		var sumOfShares int64 = 0
 
-		payloadA := network.ProofPayload{
-			MeterID:    job.MeterID,
-			Timestamp:  job.Reading.Timestamp,
-			MeterShare: share1,
-			Proof:      proofBytes,
+		for i := 0; i < numServers-1; i++ {
+			// Koristimo Int63 ali skalirano da izbegnemo teoretski overflow pri sumiranju
+			shares[i] = rand.Int63() / int64(numServers)
+			sumOfShares += shares[i]
+		}
+		shares[numServers-1] = actualConsumption - sumOfShares
+
+		// 3. Dispatching to N Servers
+		allSuccess := true
+		for i, client := range p.clients {
+			payload := network.ProofPayload{
+				MeterID:    job.MeterID,
+				Timestamp:  job.Reading.Timestamp,
+				MeterShare: shares[i],
+				Proof:      proofBytes,
+			}
+
+			// Pretpostavljamo da SendProof vraća error ako HTTP status nije 200 OK
+			if err := client.SendProof(payload); err != nil {
+				log.Printf("[Worker %d] Failed to send share to Server %d: %v", id, i, err)
+				allSuccess = false
+			}
 		}
 
-		payloadB := network.ProofPayload{
-			MeterID:    job.MeterID,
-			Timestamp:  job.Reading.Timestamp,
-			MeterShare: share2,
-			Proof:      proofBytes,
-		}
-
-		errA := p.clientA.SendProof(payloadA)
-		errB := p.clientB.SendProof(payloadB)
-
-		if errA != nil || errB != nil {
-			log.Printf("[Worker %d] Network error for %s (A: %v, B: %v)\n", id, job.MeterID, errA, errB)
-		} else {
-			fmt.Printf("[Worker %d] ZKP + MPC sent for %s (Actual %dW masked as %d and %d)\n",
-				id, job.MeterID, actualConsumption, share1, share2)
+		// 4. Final Logging - Ovo je ono što ti nedostaje!
+		if allSuccess {
+			fmt.Printf("[Worker %d] ✅ Successfully dispatched %d shares for %s (Actual: %dW)\n",
+				id, numServers, job.MeterID, actualConsumption)
 		}
 	}
 }

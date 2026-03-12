@@ -12,8 +12,15 @@ import (
 	"github.com/msc-privacy-grid-mpc-zkp/smart-meter-simulator/internal/zkp"
 )
 
+const (
+	// BufferMultiplier ensures the job channel has enough capacity to hold
+	// multiple cycles of readings, preventing the simulation loop from blocking
+	// during slow network responses.
+	BufferMultiplier = 2
+)
+
 func main() {
-	fmt.Println("⚡ Starting Edge Simulator with Worker Pool architecture...")
+	fmt.Println("⚡ Starting Edge Simulator (Multi-Node MPC ready)...")
 	fmt.Println("---------------------------------------------------------")
 
 	cfg, err := config.LoadConfig()
@@ -27,22 +34,28 @@ func main() {
 		log.Fatalf("Fatal ZKP setup error: %v", err)
 	}
 
-	clientA := network.NewCloudClient(cfg.Network.CloudURLA)
-	clientB := network.NewCloudClient(cfg.Network.CloudURLB)
+	var clients []*network.CloudClient
+	for _, url := range cfg.Network.CloudURLs {
+		clients = append(clients, network.NewCloudClient(url))
+	}
+
+	if len(clients) == 0 {
+		log.Fatalf("[FATAL] No cloud URLs found in configuration. Check your config.yaml or ENV variables.")
+	}
+	fmt.Printf("[NETWORK] Initialized %d MPC Cloud clients\n", len(clients))
 
 	var meters []*meter.SimulatedMeter
 	for i := 1; i <= cfg.Simulation.MeterCount; i++ {
 		meters = append(meters, meter.NewSimulatedMeter(cfg.Consumption.BaseLoad, cfg.Consumption.Variance))
 	}
 
-	queueSize := cfg.Simulation.MeterCount * 2
+	queueSize := cfg.Simulation.MeterCount * BufferMultiplier
 	pool := worker.NewPool(
 		cfg.Simulation.WorkerPoolSize,
 		queueSize,
 		cfg.Consumption.MaxLimit,
 		zkpEngine,
-		clientA,
-		clientB,
+		clients,
 	)
 	pool.Start()
 

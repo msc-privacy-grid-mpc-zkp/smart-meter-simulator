@@ -10,8 +10,7 @@ import (
 // AppConfig maps YAML sections and Environment variables
 type AppConfig struct {
 	Network struct {
-		CloudURLA string `yaml:"cloud_url_a" env:"CLOUD_URL_A" env-default:"http://localhost:8080/api/proofs"`
-		CloudURLB string `yaml:"cloud_url_b" env:"CLOUD_URL_B" env-default:"http://localhost:8081/api/proofs"`
+		CloudURLs []string `yaml:"cloud_urls" env:"CLOUD_URLS" env-delim:","`
 	} `yaml:"network"`
 
 	Simulation struct {
