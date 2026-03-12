@@ -1,12 +1,13 @@
-# Network settings
-cloud_url: "http://localhost:8080/api/proofs"
+network:
+  cloud_url_a: "http://localhost:8080/api/proofs"
+  cloud_url_b: "http://localhost:8081/api/proofs"
 
-# Simulation parameters
-meter_count: 10          # Total number of meters to simulate
-worker_pool_size: 4      # Number of concurrent workers generating proofs
-interval_seconds: 5      # Interval in seconds for sending data
+simulation:
+  meter_count: 10
+  worker_pool_size: 4
+  interval_seconds: 5
 
-# Consumption parameters
-base_load: 500           # Base load in watts
-variance: 2000           # Maximum variance in watts
-max_limit: 10000         # Hardware limit of the connection (in watts)
+consumption:
+  base_load: 500
+  variance: 2000
+  max_limit: 10000
