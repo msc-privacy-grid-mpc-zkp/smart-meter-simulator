@@ -23,3 +23,6 @@ config.local.yaml
 *.swo
 .DS_Store
 Thumbs.db
+
+# ZKP Keys
+*.key

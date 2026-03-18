@@ -1,0 +1,15 @@
+network:
+  cloud_urls:
+    - "http://localhost:8080/api/proofs"
+    - "http://localhost:8081/api/proofs"
+    - "http://localhost:8082/api/proofs"
+
+simulation:
+  meter_count: 500
+  worker_pool_size: 32
+  interval_seconds: 15
+
+consumption:
+  base_load: 500
+  variance: 2000
+  max_limit: 10000
