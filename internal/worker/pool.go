@@ -91,7 +91,7 @@ func (p *Pool) worker(id int) {
 
 // secureRandomInt64 generates a cryptographically secure random int64
 func (p *Pool) secureRandomInt64() int64 {
-	maxNum := big.NewInt(1 << 61)
+	maxNum := big.NewInt(1 << 40)
 	n, err := rand.Int(rand.Reader, maxNum)
 	if err != nil {
 		// Fallback na 0 u slučaju kritične greške OS entropije
