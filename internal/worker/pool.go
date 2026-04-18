@@ -49,6 +49,7 @@ func (p *Pool) worker(id int) {
 	numServers := len(p.clients)
 
 	for job := range p.Jobs {
+		// 1. ZKP Generisanje (CPU bound)
 		proof, err := p.zkpEngine.GenerateProof(job.Reading.Consumption, p.maxLimit)
 		if err != nil {
 			log.Printf("[Worker %d] ZKP Error for %s: %v", id, job.MeterID, err)
@@ -56,31 +57,48 @@ func (p *Pool) worker(id int) {
 		}
 		proofBytes, _ := network.SerializeProof(proof)
 
+		// 2. Kreiranje MPC delova
 		actualConsumption := int64(job.Reading.Consumption)
 		shares := make([]int64, numServers)
 		var sumOfShares int64 = 0
 
 		for i := 0; i < numServers-1; i++ {
-			// Generiši čist random broj (masku)
 			shares[i] = p.secureRandomInt64()
 			sumOfShares += shares[i]
 		}
-		// Poslednji server dobija razliku - ovo osigurava da je suma shares == actualConsumption
 		shares[numServers-1] = actualConsumption - sumOfShares
 
+		// 3. PARALELNO SLANJE (I/O bound)
+		var sendWg sync.WaitGroup
+		var mu sync.Mutex // Za zaštitu allSuccess varijable
 		allSuccess := true
+
 		for i, client := range p.clients {
-			payload := network.ProofPayload{
-				MeterID:    job.MeterID,
-				Timestamp:  job.Reading.Timestamp,
-				MeterShare: shares[i],
-				Proof:      proofBytes,
-			}
-			if err := client.SendProof(payload); err != nil {
-				log.Printf("[Worker %d] Server %d Unreachable: %v", id, i, err)
-				allSuccess = false
-			}
+			sendWg.Add(1)
+
+			// Pokrećemo anonimnu gorutinu za svaki server
+			go func(serverIdx int, cl *network.CloudClient, share int64) {
+				defer sendWg.Done()
+
+				payload := network.ProofPayload{
+					MeterID:    job.MeterID,
+					Timestamp:  job.Reading.Timestamp,
+					MeterShare: share,
+					Proof:      proofBytes,
+				}
+
+				if err := cl.SendProof(payload); err != nil {
+					log.Printf("[Worker %d] Server %d Unreachable: %v", id, serverIdx, err)
+
+					mu.Lock()
+					allSuccess = false
+					mu.Unlock()
+				}
+			}(i, client, shares[i]) // Prosleđujemo promenljive u gorutinu
 		}
+
+		// Čekamo da sva 3 servera odgovore (umesto da čekamo jedan po jedan)
+		sendWg.Wait()
 
 		if allSuccess {
 			fmt.Printf("[Worker %d] ✅ ZKP+MPC Dispatched | Meter: %s | Nodes: %d | Val: %dW\n",
