@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"time"
 )
@@ -15,10 +16,25 @@ type CloudClient struct {
 }
 
 func NewCloudClient(serverURL string) *CloudClient {
+	customTransport := &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+		DialContext: (&net.Dialer{
+			Timeout:   30 * time.Second,
+			KeepAlive: 30 * time.Second,
+		}).DialContext,
+		ForceAttemptHTTP2:     true,
+		MaxIdleConns:          100,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+		MaxIdleConnsPerHost:   100,
+	}
+
 	return &CloudClient{
 		ServerURL: serverURL,
 		httpClient: &http.Client{
-			Timeout: 10 * time.Second,
+			Timeout:   10 * time.Second,
+			Transport: customTransport,
 		},
 	}
 }
@@ -40,7 +56,7 @@ func (c *CloudClient) SendProof(payload ProofPayload) error {
 	if err != nil {
 		return fmt.Errorf("network error while sending proof to cloud: %w", err)
 	}
-	
+
 	defer func() {
 		if closeErr := resp.Body.Close(); closeErr != nil {
 			log.Printf("warning: failed to close response body: %v\n", closeErr)
