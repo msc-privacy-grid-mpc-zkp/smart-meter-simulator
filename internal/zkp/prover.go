@@ -75,10 +75,12 @@ func Setup() (*Engine, error) {
 	}, nil
 }
 
-func (engine *Engine) GenerateProof(consumption, maxLimit uint64) (groth16.Proof, error) {
+func (engine *Engine) GenerateProof(consumption, maxLimit uint64, meterID, timestamp uint64) (groth16.Proof, error) {
 	assignment := &RangeProofCircuit{
 		Consumption: consumption,
 		MaxLimit:    maxLimit,
+		MeterID:     meterID,
+		Timestamp:   timestamp,
 	}
 
 	witness, err := frontend.NewWitness(assignment, ecc.BN254.ScalarField())

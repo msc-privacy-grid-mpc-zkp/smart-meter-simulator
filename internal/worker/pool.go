@@ -3,6 +3,7 @@ package worker
 import (
 	"crypto/rand"
 	"fmt"
+	"hash/fnv"
 	"log"
 	"math/big"
 	"sync"
@@ -50,7 +51,14 @@ func (p *Pool) worker(id int) {
 
 	for job := range p.Jobs {
 		// 1. ZKP Generisanje (CPU bound)
-		proof, err := p.zkpEngine.GenerateProof(job.Reading.Consumption, p.maxLimit)
+		numericMeterID := stringToUint64(job.MeterID)
+		proof, err := p.zkpEngine.GenerateProof(
+			job.Reading.Consumption,
+			p.maxLimit,
+			numericMeterID,
+			uint64(job.Reading.Timestamp), // Timestamp претварамо у uint64
+		)
+
 		if err != nil {
 			log.Printf("[Worker %d] ZKP Error for %s: %v", id, job.MeterID, err)
 			continue
@@ -116,4 +124,10 @@ func (p *Pool) secureRandomInt64() int64 {
 		return 0
 	}
 	return n.Int64()
+}
+
+func stringToUint64(s string) uint64 {
+	h := fnv.New64a()
+	h.Write([]byte(s))
+	return h.Sum64()
 }
