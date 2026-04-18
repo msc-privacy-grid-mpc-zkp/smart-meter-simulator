@@ -1,12 +1,12 @@
 network:
   cloud_urls:
-    - "http://192.168.1.2:8080/api/proofs"
-    - "http://192.168.1.2:8081/api/proofs"
-    - "http://192.168.1.2:8082/api/proofs"
+    - "http://localhost:8080/api/proofs"
+    - "http://localhost:8081/api/proofs"
+    - "http://localhost:8082/api/proofs"
 
 simulation:
-  meter_count: 500
-  worker_pool_size: 32
+  meter_count: 10
+  worker_pool_size: 4
   interval_seconds: 15
 
 consumption:
