@@ -2,12 +2,13 @@ package zkp
 
 import (
 	"fmt"
+	"os"
+
 	"github.com/consensys/gnark-crypto/ecc"
 	"github.com/consensys/gnark/backend/groth16"
 	"github.com/consensys/gnark/constraint"
 	"github.com/consensys/gnark/frontend"
 	"github.com/consensys/gnark/frontend/cs/r1cs"
-	"os"
 )
 
 type Engine struct {
@@ -16,57 +17,92 @@ type Engine struct {
 	CompiledConstraintSystem constraint.ConstraintSystem
 }
 
+func fileExists(filename string) bool {
+	info, err := os.Stat(filename)
+	if os.IsNotExist(err) {
+		return false
+	}
+	return !info.IsDir()
+}
+
 func Setup() (*Engine, error) {
 	var circuit RangeProofCircuit
 
 	compiledConstraintSystem, err := frontend.Compile(ecc.BN254.ScalarField(), r1cs.NewBuilder, &circuit)
-
 	if err != nil {
 		return nil, fmt.Errorf("an error occured during compiling circuit: %w", err)
 	}
 
-	provingKey, verifyingKey, err := groth16.Setup(compiledConstraintSystem)
-	if err != nil {
-		return nil, fmt.Errorf("an error occured during generating keys: %w", err)
-	}
+	var provingKey groth16.ProvingKey
+	var verifyingKey groth16.VerifyingKey
 
-	pkFile, err := os.Create("proving.key")
-	if err != nil {
-		return nil, fmt.Errorf("failed to create proving.key file: %w", err)
-	}
+	if fileExists("proving.key") && fileExists("verifying.key") {
+		fmt.Println("[SETUP] Found existing keys on disk. Loading...")
 
-	_, err = provingKey.WriteTo(pkFile)
-	if err != nil {
-		closeErr := pkFile.Close()
-		if closeErr != nil {
-			return nil, fmt.Errorf("failed to write proving key: %v (also failed to close file: %v)", err, closeErr)
+		provingKey = groth16.NewProvingKey(ecc.BN254)
+		pkFile, err := os.Open("proving.key")
+		if err != nil {
+			return nil, fmt.Errorf("failed to open proving.key: %w", err)
 		}
-		return nil, fmt.Errorf("failed to write proving key: %w", err)
-	}
+		defer func() {
+			if err := pkFile.Close(); err != nil {
+				fmt.Printf("[WARNING] Failed to close proving.key after reading: %v\n", err)
+			}
+		}()
 
-	if err := pkFile.Close(); err != nil {
-		return nil, fmt.Errorf("failed to close proving key file: %w", err)
-	}
-	fmt.Println("[SETUP] Successfully saved proving.key")
-
-	vkFile, err := os.Create("verifying.key")
-	if err != nil {
-		return nil, fmt.Errorf("failed to create verifying.key file: %w", err)
-	}
-
-	_, err = verifyingKey.WriteTo(vkFile)
-	if err != nil {
-		closeErr := vkFile.Close()
-		if closeErr != nil {
-			return nil, fmt.Errorf("failed to write verifying key: %v (also failed to close file: %v)", err, closeErr)
+		if _, err := provingKey.ReadFrom(pkFile); err != nil {
+			return nil, fmt.Errorf("failed to read proving key: %w", err)
 		}
-		return nil, fmt.Errorf("failed to write verifying key: %w", err)
-	}
 
-	if err := vkFile.Close(); err != nil {
-		return nil, fmt.Errorf("failed to close verifying key file: %w", err)
+		verifyingKey = groth16.NewVerifyingKey(ecc.BN254)
+		vkFile, err := os.Open("verifying.key")
+		if err != nil {
+			return nil, fmt.Errorf("failed to open verifying.key: %w", err)
+		}
+		defer func() {
+			if err := vkFile.Close(); err != nil {
+				fmt.Printf("[WARNING] Failed to close verifying.key after reading: %v\n", err)
+			}
+		}()
+
+		fmt.Println("[SETUP] Keys loaded successfully!")
+
+	} else {
+		fmt.Println("[SETUP] Keys not found. Generating new Trusted Setup (this may take a moment)...")
+
+		provingKey, verifyingKey, err = groth16.Setup(compiledConstraintSystem)
+		if err != nil {
+			return nil, fmt.Errorf("an error occured during generating keys: %w", err)
+		}
+
+		pkOut, err := os.Create("proving.key")
+		if err != nil {
+			return nil, fmt.Errorf("failed to create proving.key file: %w", err)
+		}
+		defer func() {
+			if err := pkOut.Close(); err != nil {
+				fmt.Printf("[WARNING] Failed to close proving.key after writing: %v\n", err)
+			}
+		}()
+		if _, err := provingKey.WriteTo(pkOut); err != nil {
+			return nil, fmt.Errorf("failed to write proving key: %w", err)
+		}
+
+		vkOut, err := os.Create("verifying.key")
+		if err != nil {
+			return nil, fmt.Errorf("failed to create verifying.key file: %w", err)
+		}
+		defer func() {
+			if err := vkOut.Close(); err != nil {
+				fmt.Printf("[WARNING] Failed to close verifying.key after writing: %v\n", err)
+			}
+		}()
+		if _, err := verifyingKey.WriteTo(vkOut); err != nil {
+			return nil, fmt.Errorf("failed to write verifying key: %w", err)
+		}
+
+		fmt.Println("[SETUP] Successfully generated and saved keys to disk!")
 	}
-	fmt.Println("[SETUP] Successfully saved verifying.key")
 
 	return &Engine{
 		ProvingKey:               provingKey,
@@ -75,21 +111,23 @@ func Setup() (*Engine, error) {
 	}, nil
 }
 
-func (engine *Engine) GenerateProof(consumption, maxLimit uint64) (groth16.Proof, error) {
+func (engine *Engine) GenerateProof(consumption, maxLimit, meterID, timestamp uint64) (groth16.Proof, error) {
 	assignment := &RangeProofCircuit{
 		Consumption: consumption,
 		MaxLimit:    maxLimit,
+		MeterID:     meterID,
+		Timestamp:   timestamp,
 	}
 
 	witness, err := frontend.NewWitness(assignment, ecc.BN254.ScalarField())
 	if err != nil {
-		return nil, fmt.Errorf("An error occured during generating witness: %w", err)
+		return nil, fmt.Errorf("an error occured during generating witness: %w", err)
 	}
 
 	proof, err := groth16.Prove(engine.CompiledConstraintSystem, engine.ProvingKey, witness)
 
 	if err != nil {
-		return nil, fmt.Errorf("An error occured during generating proof: %w", err)
+		return nil, fmt.Errorf("an error occured during generating proof: %w", err)
 	}
 
 	return proof, nil
