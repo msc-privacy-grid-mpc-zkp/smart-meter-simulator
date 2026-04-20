@@ -1,5 +1,5 @@
 network:
-  cloud_urls:
+  aggregator_urls:
     - "http://localhost:8080/api/proofs"
     - "http://localhost:8081/api/proofs"
     - "http://localhost:8082/api/proofs"

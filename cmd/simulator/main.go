@@ -3,6 +3,9 @@ package main
 import (
 	"fmt"
 	"log"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/msc-privacy-grid-mpc-zkp/smart-meter-simulator/internal/config"
@@ -25,24 +28,24 @@ func main() {
 
 	cfg, err := config.LoadConfig()
 	if err != nil {
-		log.Fatalf("Fatal error loading configuration: %v", err)
+		log.Fatalf("[FATAL] Error loading configuration: %v", err)
 	}
 
-	fmt.Println("[SETUP] Initializing ZKP Engine...")
+	log.Println("[SETUP] Initializing ZKP Engine...")
 	zkpEngine, err := zkp.Setup()
 	if err != nil {
-		log.Fatalf("Fatal ZKP setup error: %v", err)
+		log.Fatalf("[FATAL] ZKP setup error: %v", err)
 	}
 
-	var clients []*network.CloudClient
-	for _, url := range cfg.Network.CloudURLs {
-		clients = append(clients, network.NewCloudClient(url))
+	var clients []*network.Client
+	for _, url := range cfg.Network.AggregatorURLs {
+		clients = append(clients, network.NewClient(url))
 	}
 
 	if len(clients) == 0 {
-		log.Fatalf("[FATAL] No cloud URLs found in configuration. Check your config.yaml or ENV variables.")
+		log.Fatalf("[FATAL] No aggregator URLs found in configuration. Check your config.yaml or ENV variables.")
 	}
-	fmt.Printf("[NETWORK] Initialized %d MPC Cloud clients\n", len(clients))
+	log.Printf("[NETWORK] Initialized %d MPC aggregator clients\n", len(clients))
 
 	var meters []*meter.SimulatedMeter
 	for i := 1; i <= cfg.Simulation.MeterCount; i++ {
@@ -62,13 +65,34 @@ func main() {
 	ticker := time.NewTicker(time.Duration(cfg.Simulation.IntervalSeconds) * time.Second)
 	defer ticker.Stop()
 
-	for range ticker.C {
-		fmt.Println("\n--- New synchronized reading cycle ---")
-		for i, m := range meters {
-			pool.Jobs <- worker.Job{
-				MeterID: fmt.Sprintf("meter-RS-%03d", i+1),
-				Reading: m.Generate(),
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+
+	log.Println("[SYSTEM] Simulation running. Press Ctrl+C to stop.")
+
+	for {
+		select {
+		case <-ticker.C:
+			fmt.Println("\n--- New synchronized reading cycle ---")
+			for i, m := range meters {
+				pool.Jobs <- worker.Job{
+					MeterID: fmt.Sprintf("meter-RS-%03d", i+1),
+					Reading: m.Generate(),
+				}
 			}
+		case sig := <-sigChan:
+			log.Printf("\n[SYSTEM] Received OS signal: %v. Initiating graceful shutdown...\n", sig)
+			
+			ticker.Stop()
+
+			close(pool.Jobs)
+
+			log.Println("[SYSTEM] Waiting for workers to finish current tasks...")
+
+			pool.Wait()
+
+			log.Println("[SYSTEM] Edge Simulator stopped cleanly.")
+			return
 		}
 	}
 }
