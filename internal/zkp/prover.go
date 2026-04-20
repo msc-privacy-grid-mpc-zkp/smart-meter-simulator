@@ -44,7 +44,12 @@ func Setup() (*Engine, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to open proving.key: %w", err)
 		}
-		defer pkFile.Close()
+		defer func() {
+			if err := pkFile.Close(); err != nil {
+				fmt.Printf("[WARNING] Failed to close proving.key after reading: %v\n", err)
+			}
+		}()
+
 		if _, err := provingKey.ReadFrom(pkFile); err != nil {
 			return nil, fmt.Errorf("failed to read proving key: %w", err)
 		}
@@ -54,10 +59,11 @@ func Setup() (*Engine, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to open verifying.key: %w", err)
 		}
-		defer vkFile.Close()
-		if _, err := verifyingKey.ReadFrom(vkFile); err != nil {
-			return nil, fmt.Errorf("failed to read verifying key: %w", err)
-		}
+		defer func() {
+			if err := vkFile.Close(); err != nil {
+				fmt.Printf("[WARNING] Failed to close verifying.key after reading: %v\n", err)
+			}
+		}()
 
 		fmt.Println("[SETUP] Keys loaded successfully!")
 
@@ -73,7 +79,11 @@ func Setup() (*Engine, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to create proving.key file: %w", err)
 		}
-		defer pkOut.Close()
+		defer func() {
+			if err := pkOut.Close(); err != nil {
+				fmt.Printf("[WARNING] Failed to close proving.key after writing: %v\n", err)
+			}
+		}()
 		if _, err := provingKey.WriteTo(pkOut); err != nil {
 			return nil, fmt.Errorf("failed to write proving key: %w", err)
 		}
@@ -82,7 +92,11 @@ func Setup() (*Engine, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to create verifying.key file: %w", err)
 		}
-		defer vkOut.Close()
+		defer func() {
+			if err := vkOut.Close(); err != nil {
+				fmt.Printf("[WARNING] Failed to close verifying.key after writing: %v\n", err)
+			}
+		}()
 		if _, err := verifyingKey.WriteTo(vkOut); err != nil {
 			return nil, fmt.Errorf("failed to write verifying key: %w", err)
 		}
@@ -107,13 +121,13 @@ func (engine *Engine) GenerateProof(consumption, maxLimit, meterID, timestamp ui
 
 	witness, err := frontend.NewWitness(assignment, ecc.BN254.ScalarField())
 	if err != nil {
-		return nil, fmt.Errorf("An error occured during generating witness: %w", err)
+		return nil, fmt.Errorf("an error occured during generating witness: %w", err)
 	}
 
 	proof, err := groth16.Prove(engine.CompiledConstraintSystem, engine.ProvingKey, witness)
 
 	if err != nil {
-		return nil, fmt.Errorf("An error occured during generating proof: %w", err)
+		return nil, fmt.Errorf("an error occured during generating proof: %w", err)
 	}
 
 	return proof, nil
