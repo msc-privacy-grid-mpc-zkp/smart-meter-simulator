@@ -7,10 +7,13 @@ import (
 	"github.com/ilyakaznacheev/cleanenv"
 )
 
-// AppConfig maps YAML sections and Environment variables
+const defaultConfigFile = "config.yaml"
+
+// AppConfig represents the central configuration structure for the simulator,
+// mapping both YAML file sections and OS Environment variables.
 type AppConfig struct {
 	Network struct {
-		CloudURLs []string `yaml:"cloud_urls" env:"CLOUD_URLS" env-delim:","`
+		AggregatorURLs []string `yaml:"aggregator_urls" env:"AGGREGATOR_URLS" env-delim:","`
 	} `yaml:"network"`
 
 	Simulation struct {
@@ -26,27 +29,30 @@ type AppConfig struct {
 	} `yaml:"consumption"`
 }
 
-// LoadConfig reads configuration from file or environment variables
+// LoadConfig parses the configuration from the specified YAML file or
+// falls back to environment variables if the file is missing.
+// It enforces minimum safety bounds for critical simulation parameters.
 func LoadConfig() (*AppConfig, error) {
-	configPath := flag.String("config", "config.yaml", "Path to YAML configuration")
+	configPath := flag.String("config", defaultConfigFile, "Path to the YAML configuration file")
 	flag.Parse()
 
 	var cfg AppConfig
 
-	err := cleanenv.ReadConfig(*configPath, &cfg)
-	if err != nil {
-		log.Println("[INFO] YAML config not found, falling back to Environment variables.")
+	if err := cleanenv.ReadConfig(*configPath, &cfg); err != nil {
+		log.Printf("[INFO] YAML config (%s) not found or invalid, falling back to Environment variables.\n", *configPath)
 		if errEnv := cleanenv.ReadEnv(&cfg); errEnv != nil {
 			return nil, errEnv
 		}
 	}
 
-	// Safety checks (fallback to defaults if completely missing)
 	if cfg.Simulation.WorkerPoolSize < 1 {
 		cfg.Simulation.WorkerPoolSize = 1
 	}
 	if cfg.Simulation.MeterCount < 1 {
 		cfg.Simulation.MeterCount = 1
+	}
+	if cfg.Simulation.IntervalSeconds < 1 {
+		cfg.Simulation.IntervalSeconds = 1
 	}
 
 	return &cfg, nil

@@ -25,4 +25,4 @@ config.local.yaml
 Thumbs.db
 
 # ZKP Keys
-*.key
+keys/*.key
