@@ -11,7 +11,7 @@ import (
 type ProofPayload struct {
 	MeterID    string `json:"meter_id"`
 	Timestamp  int64  `json:"timestamp"`
-	MeterShare int64  `json:"meter_share"`
+	MeterShare uint64 `json:"meter_share"`
 	Proof      []byte `json:"proof"`
 }
 

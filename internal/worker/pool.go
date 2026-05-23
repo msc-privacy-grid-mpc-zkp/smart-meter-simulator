@@ -90,14 +90,16 @@ func (p *Pool) worker(id int) {
 		}
 
 		// 2. MPC Share Splitting
-		actualConsumption := int64(job.Reading.Consumption)
-		shares := make([]int64, numServers)
-		var sumOfShares int64 = 0
+		// Originalna potrošnja sada ostaje uint64 (nema cast-ovanja)
+		actualConsumption := job.Reading.Consumption
+		shares := make([]uint64, numServers)
+		var sumOfShares uint64 = 0
 
 		for i := 0; i < numServers-1; i++ {
-			shares[i] = crypto.SecureRandomInt64()
+			shares[i] = crypto.SecureRandomUint64() // Pozivamo novu funkciju
 			sumOfShares += shares[i]
 		}
+		// Oduzimanje se sada automatski odvija po modulu 2^64
 		shares[numServers-1] = actualConsumption - sumOfShares
 
 		var sendWg sync.WaitGroup
@@ -107,7 +109,8 @@ func (p *Pool) worker(id int) {
 		for i, client := range p.clients {
 			sendWg.Add(1)
 
-			go func(serverIdx int, cl *network.Client, share int64) {
+			// Promijenjen tip parametra share u uint64
+			go func(serverIdx int, cl *network.Client, share uint64) {
 				defer sendWg.Done()
 
 				payload := network.ProofPayload{

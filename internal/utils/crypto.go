@@ -2,6 +2,7 @@ package crypto
 
 import (
 	"crypto/rand"
+	"encoding/binary"
 	"hash/fnv"
 	"math/big"
 )
@@ -19,6 +20,7 @@ func HashStringToUint64(s string) uint64 {
 	return h.Sum64()
 }
 
+// TODO: Delete (depricated)
 // SecureRandomInt64 generates a cryptographically secure random int64
 // used primarily for creating Multi-Party Computation (MPC) secret shares.
 // It relies on the operating system's entropy pool (crypto/rand) to ensure
@@ -35,4 +37,15 @@ func SecureRandomInt64() int64 {
 	}
 
 	return n.Int64()
+}
+
+// SecureRandomUint64 generiše kriptografski siguran uint64
+// oslanjajući se na cijeli Z_{2^64} opseg.
+func SecureRandomUint64() uint64 {
+	var b [8]byte
+	_, err := rand.Read(b[:])
+	if err != nil {
+		return 0
+	}
+	return binary.LittleEndian.Uint64(b[:])
 }
