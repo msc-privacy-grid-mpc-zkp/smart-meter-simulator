@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"log"
 	"os"
@@ -26,9 +27,20 @@ func main() {
 	fmt.Println("⚡ Starting Edge Simulator (Multi-Node MPC ready)...")
 	fmt.Println("---------------------------------------------------------")
 
+	// Parse CLI flags for red team testing
+	maliciousReplay := flag.Bool("malicious-replay", false, "Enable Replay Attack simulation (Test 1.1)")
+	flag.Parse()
+
 	cfg, err := config.LoadConfig()
 	if err != nil {
 		log.Fatalf("[FATAL] Error loading configuration: %v", err)
+	}
+
+	// Override config with CLI flags if provided
+	cfg.RedTeam.MaliciousReplay = *maliciousReplay
+
+	if cfg.RedTeam.MaliciousReplay {
+		log.Println("[RED TEAM] ⚠️  REPLAY ATTACK MODE ENABLED - Test 1.1")
 	}
 
 	log.Println("[SETUP] Initializing ZKP Engine...")
@@ -60,6 +72,7 @@ func main() {
 		zkpEngine,
 		clients,
 	)
+	pool.SetMaliciousReplay(cfg.RedTeam.MaliciousReplay)
 	pool.Start()
 
 	ticker := time.NewTicker(time.Duration(cfg.Simulation.IntervalSeconds) * time.Second)
