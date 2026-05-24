@@ -3,9 +3,11 @@ package zkp
 import (
 	"fmt"
 	"log"
+	"math/big"
 	"os"
 
 	"github.com/consensys/gnark-crypto/ecc"
+	mimcNative "github.com/consensys/gnark-crypto/ecc/bn254/fr/mimc"
 	"github.com/consensys/gnark/backend/groth16"
 	"github.com/consensys/gnark/constraint"
 	"github.com/consensys/gnark/frontend"
@@ -59,28 +61,60 @@ func Setup() (*Engine, error) {
 	}, nil
 }
 
+// padTo32Bytes konvertuje uint64 u 32-bajtni niz (Big-Endian format).
+// Ovo je KRITIČNO jer gnark BN254 polje uvek radi sa blokovima od 32 bajta.
+func padTo32Bytes(val uint64) []byte {
+	b := make([]byte, 32)
+	new(big.Int).SetUint64(val).FillBytes(b)
+	return b
+}
+
 // GenerateProof computes a zk-SNARK proof demonstrating that a secret consumption
 // value is less than or equal to the public maxLimit, while cryptographically
 // binding the proof to a specific meterID and timestamp to prevent replay attacks.
-func (engine *Engine) GenerateProof(consumption, maxLimit, meterID, timestamp uint64) (groth16.Proof, error) {
+// GenerateProof computes a zk-SNARK proof demonstrating that a secret consumption
+// value is less than or equal to the public maxLimit, while cryptographically
+// binding the proof to a specific meterID and timestamp to prevent replay attacks.
+func (engine *Engine) GenerateProof(consumption, maxLimit, meterID, timestamp uint64) (groth16.Proof, []byte, error) {
+
+	// Nativni MiMC hešer za BN254
+	h := mimcNative.NewMiMC()
+
+	// Upisujemo tačno 3x32 bajta u hešer uz proveru grešaka
+	if _, err := h.Write(padTo32Bytes(consumption)); err != nil {
+		return nil, nil, fmt.Errorf("failed to hash consumption: %w", err)
+	}
+
+	if _, err := h.Write(padTo32Bytes(meterID)); err != nil {
+		return nil, nil, fmt.Errorf("failed to hash meterID: %w", err)
+	}
+
+	if _, err := h.Write(padTo32Bytes(timestamp)); err != nil {
+		return nil, nil, fmt.Errorf("failed to hash timestamp: %w", err)
+	}
+
+	commitment := h.Sum(nil)
+
 	assignment := &RangeProofCircuit{
 		Consumption: consumption,
 		MaxLimit:    maxLimit,
 		MeterID:     meterID,
 		Timestamp:   timestamp,
+		Commitment:  new(big.Int).SetBytes(commitment),
 	}
 
 	witness, err := frontend.NewWitness(assignment, ecc.BN254.ScalarField())
 	if err != nil {
-		return nil, fmt.Errorf("an error occurred during generating witness: %w", err)
+		return nil, nil, fmt.Errorf("failed to generate witness: %w", err)
 	}
 
 	proof, err := groth16.Prove(engine.CompiledConstraintSystem, engine.ProvingKey, witness)
 	if err != nil {
-		return nil, fmt.Errorf("an error occurred during generating proof: %w", err)
+		return nil, nil, fmt.Errorf("failed to generate proof: %w", err)
 	}
 
-	return proof, nil
+	// Vraćamo i proof i commitment!
+	return proof, commitment, nil
 }
 
 // --- Private Helper Functions ---

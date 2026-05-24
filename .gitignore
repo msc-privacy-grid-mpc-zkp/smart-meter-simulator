@@ -26,3 +26,4 @@ Thumbs.db
 
 # ZKP Keys
 keys/*.key
+.aider*
