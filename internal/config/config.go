@@ -27,6 +27,10 @@ type AppConfig struct {
 		Variance uint64 `yaml:"variance" env:"VARIANCE" env-default:"2000"`
 		MaxLimit uint64 `yaml:"max_limit" env:"MAX_LIMIT" env-default:"10000"`
 	} `yaml:"consumption"`
+
+	RedTeam struct {
+		MaliciousReplay bool `yaml:"malicious_replay" env:"MALICIOUS_REPLAY" env-default:"false"`
+	} `yaml:"red_team"`
 }
 
 // LoadConfig parses the configuration from the specified YAML file or

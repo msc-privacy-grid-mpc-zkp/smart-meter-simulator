@@ -22,24 +22,26 @@ type Job struct {
 // It handles Zero-Knowledge Proof generation, Multi-Party Computation share splitting,
 // and network dispatch to the aggregator nodes.
 type Pool struct {
-	Jobs       chan Job
-	wg         *sync.WaitGroup
-	workerSize int
-	maxLimit   uint64
-	zkpEngine  *zkp.Engine
-	clients    []*network.Client
+	Jobs              chan Job
+	wg                *sync.WaitGroup
+	workerSize        int
+	maxLimit          uint64
+	zkpEngine         *zkp.Engine
+	clients           []*network.Client
+	maliciousReplay   bool
 }
 
 // NewPool initializes a new worker pool with the specified concurrency size,
-// job queue capacity, cryptographic engine, and network clients.
-func NewPool(workerSize, queueSize int, maxLimit uint64, zkpEngine *zkp.Engine, clients []*network.Client) *Pool {
+// job queue capacity, cryptographic engine, network clients, and red team flags.
+func NewPool(workerSize, queueSize int, maxLimit uint64, zkpEngine *zkp.Engine, clients []*network.Client, maliciousReplay bool) *Pool {
 	return &Pool{
-		Jobs:       make(chan Job, queueSize),
-		wg:         &sync.WaitGroup{},
-		workerSize: workerSize,
-		maxLimit:   maxLimit,
-		zkpEngine:  zkpEngine,
-		clients:    clients,
+		Jobs:              make(chan Job, queueSize),
+		wg:                &sync.WaitGroup{},
+		workerSize:        workerSize,
+		maxLimit:          maxLimit,
+		zkpEngine:         zkpEngine,
+		clients:           clients,
+		maliciousReplay:   maliciousReplay,
 	}
 }
 
@@ -128,6 +130,48 @@ func (p *Pool) worker(id int) {
 		if allSuccess {
 			fmt.Printf("[Worker %d] ✅ ZKP+MPC Dispatched | Meter: %s | Nodes: %d | Val: %dW\n",
 				id, job.MeterID, numServers, actualConsumption)
+		}
+
+		// RED TEAM: Test 1.1 - Replay Attack Simulation
+		// If enabled, immediately resend the EXACT same payload without regenerating proof or updating timestamp
+		if p.maliciousReplay && allSuccess {
+			log.Printf("[Worker %d] 🔴 RED TEAM: Initiating Replay Attack for meter %s\n", id, job.MeterID)
+			
+			var replayWg sync.WaitGroup
+			var replayMu sync.Mutex
+			replaySuccess := true
+
+			for i, client := range p.clients {
+				replayWg.Add(1)
+
+				// Send the IDENTICAL payload again (no proof regeneration, no timestamp update)
+				go func(serverIdx int, cl *network.Client, share uint64) {
+					defer replayWg.Done()
+
+					// Clone the exact same payload object
+					replayPayload := network.ProofPayload{
+						MeterID:    job.MeterID,
+						Timestamp:  job.Reading.Timestamp,
+						MeterShare: share,
+						Proof:      proofBytes,
+						Commitment: commitment,
+					}
+
+					if err := cl.SendProof(replayPayload); err != nil {
+						log.Printf("[Worker %d] Replay Attack - Server %d Unreachable: %v\n", id, serverIdx, err)
+						replayMu.Lock()
+						replaySuccess = false
+						replayMu.Unlock()
+					}
+				}(i, client, shares[i])
+			}
+
+			replayWg.Wait()
+
+			if replaySuccess {
+				fmt.Printf("[Worker %d] 🔴 REPLAY ATTACK SUCCESSFUL | Meter: %s | Duplicate payload sent to all nodes\n",
+					id, job.MeterID)
+			}
 		}
 	}
 }
