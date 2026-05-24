@@ -29,6 +29,7 @@ func main() {
 
 	// Parse CLI flags for red team testing
 	maliciousReplay := flag.Bool("malicious-replay", false, "Enable Replay Attack simulation (Test 1.1)")
+	maliciousTamperCount := flag.Int("malicious-tamper-count", 0, "Number of meters to tamper (Test 1.2, default 0 = disabled)")
 	flag.Parse()
 
 	cfg, err := config.LoadConfig()
@@ -36,10 +37,15 @@ func main() {
 		log.Fatalf("[FATAL] Error loading configuration: %v", err)
 	}
 
-	// Override config with CLI flag if provided
+	// Override config with CLI flags if provided
 	cfg.RedTeam.MaliciousReplay = *maliciousReplay
 	if cfg.RedTeam.MaliciousReplay {
 		log.Println("[RED TEAM] ⚠️  REPLAY ATTACK SIMULATION ENABLED (Test 1.1)")
+	}
+
+	cfg.RedTeam.MaliciousTamperCount = *maliciousTamperCount
+	if cfg.RedTeam.MaliciousTamperCount > 0 {
+		log.Printf("[RED TEAM] ⚠️  PUBLIC INPUT TAMPERING SIMULATION ENABLED (Test 1.2) - Will tamper %d meter(s)\n", cfg.RedTeam.MaliciousTamperCount)
 	}
 
 	log.Println("[SETUP] Initializing ZKP Engine...")
@@ -71,6 +77,7 @@ func main() {
 		zkpEngine,
 		clients,
 		cfg.RedTeam.MaliciousReplay,
+		cfg.RedTeam.MaliciousTamperCount,
 	)
 	pool.Start()
 
@@ -86,6 +93,13 @@ func main() {
 		select {
 		case <-ticker.C:
 			fmt.Println("\n--- New synchronized reading cycle ---")
+			
+			// RED TEAM: Reset tamperedCount at the beginning of each cycle
+			// This ensures that exactly MaliciousTamperCount meters are tampered in EVERY cycle
+			if cfg.RedTeam.MaliciousTamperCount > 0 {
+				worker.ResetTamperedCount()
+			}
+			
 			for i, m := range meters {
 				pool.Jobs <- worker.Job{
 					MeterID: fmt.Sprintf("meter-RS-%03d", i+1),

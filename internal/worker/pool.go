@@ -4,12 +4,24 @@ import (
 	"fmt"
 	"log"
 	"sync"
+	"sync/atomic"
 
 	"github.com/msc-privacy-grid-mpc-zkp/smart-meter-simulator/internal/meter"
 	"github.com/msc-privacy-grid-mpc-zkp/smart-meter-simulator/internal/network"
 	"github.com/msc-privacy-grid-mpc-zkp/smart-meter-simulator/internal/utils"
 	"github.com/msc-privacy-grid-mpc-zkp/smart-meter-simulator/internal/zkp"
 )
+
+// tamperedCount tracks how many payloads have been maliciously tampered.
+// Used for Test 1.2: Public Input Tampering with configurable meter count.
+var tamperedCount atomic.Int32
+
+// ResetTamperedCount resets the tamperedCount to 0.
+// This is called at the beginning of each synchronization cycle to ensure
+// that exactly MaliciousTamperCount meters are tampered in every cycle.
+func ResetTamperedCount() {
+	tamperedCount.Store(0)
+}
 
 // Job represents a single unit of work for the worker pool, containing
 // the meter identifier and its latest consumption reading.
@@ -22,26 +34,28 @@ type Job struct {
 // It handles Zero-Knowledge Proof generation, Multi-Party Computation share splitting,
 // and network dispatch to the aggregator nodes.
 type Pool struct {
-	Jobs              chan Job
-	wg                *sync.WaitGroup
-	workerSize        int
-	maxLimit          uint64
-	zkpEngine         *zkp.Engine
-	clients           []*network.Client
-	maliciousReplay   bool
+	Jobs                   chan Job
+	wg                     *sync.WaitGroup
+	workerSize             int
+	maxLimit               uint64
+	zkpEngine              *zkp.Engine
+	clients                []*network.Client
+	maliciousReplay        bool
+	maliciousTamperCount   int
 }
 
 // NewPool initializes a new worker pool with the specified concurrency size,
 // job queue capacity, cryptographic engine, network clients, and red team flags.
-func NewPool(workerSize, queueSize int, maxLimit uint64, zkpEngine *zkp.Engine, clients []*network.Client, maliciousReplay bool) *Pool {
+func NewPool(workerSize, queueSize int, maxLimit uint64, zkpEngine *zkp.Engine, clients []*network.Client, maliciousReplay bool, maliciousTamperCount int) *Pool {
 	return &Pool{
-		Jobs:              make(chan Job, queueSize),
-		wg:                &sync.WaitGroup{},
-		workerSize:        workerSize,
-		maxLimit:          maxLimit,
-		zkpEngine:         zkpEngine,
-		clients:           clients,
-		maliciousReplay:   maliciousReplay,
+		Jobs:                   make(chan Job, queueSize),
+		wg:                     &sync.WaitGroup{},
+		workerSize:             workerSize,
+		maxLimit:               maxLimit,
+		zkpEngine:              zkpEngine,
+		clients:                clients,
+		maliciousReplay:        maliciousReplay,
+		maliciousTamperCount:   maliciousTamperCount,
 	}
 }
 
@@ -114,6 +128,17 @@ func (p *Pool) worker(id int) {
 					MeterShare: share,
 					Proof:      proofBytes,
 					Commitment: commitment,
+				}
+
+				// RED TEAM: Test 1.2 - Public Input Tampering
+				// If enabled, mutate the MeterID in the payload ONLY (proof remains valid for original meter)
+				// Only tamper up to the configured number of meters
+				if p.maliciousTamperCount > 0 && tamperedCount.Load() < int32(p.maliciousTamperCount) {
+					if tamperedCount.Add(1) <= int32(p.maliciousTamperCount) {
+						payload.MeterID = payload.MeterID + "-FAKE"
+						log.Printf("[Worker %d] 🔴 RED TEAM: Tampering MeterID to %s (proof still bound to original meter) [%d/%d]\n", 
+							id, payload.MeterID, tamperedCount.Load(), p.maliciousTamperCount)
+					}
 				}
 
 				if err := cl.SendProof(payload); err != nil {

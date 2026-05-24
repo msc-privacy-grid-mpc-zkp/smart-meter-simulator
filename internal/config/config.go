@@ -29,7 +29,8 @@ type AppConfig struct {
 	} `yaml:"consumption"`
 
 	RedTeam struct {
-		MaliciousReplay bool `yaml:"malicious_replay" env:"MALICIOUS_REPLAY" env-default:"false"`
+		MaliciousReplay    bool `yaml:"malicious_replay" env:"MALICIOUS_REPLAY" env-default:"false"`
+		MaliciousTamperCount int `yaml:"malicious_tamper_count" env:"MALICIOUS_TAMPER_COUNT" env-default:"0"`
 	} `yaml:"red_team"`
 }
 
