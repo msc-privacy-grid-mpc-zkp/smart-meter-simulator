@@ -65,7 +65,7 @@ func (p *Pool) worker(id int) {
 
 	for job := range p.Jobs {
 		numericMeterID := crypto.HashStringToUint64(job.MeterID)
-		proof, err := p.zkpEngine.GenerateProof(
+		proof, commitment, err := p.zkpEngine.GenerateProof(
 			job.Reading.Consumption,
 			p.maxLimit,
 			numericMeterID,
@@ -111,6 +111,7 @@ func (p *Pool) worker(id int) {
 					Timestamp:  job.Reading.Timestamp,
 					MeterShare: share,
 					Proof:      proofBytes,
+					Commitment: commitment,
 				}
 
 				if err := cl.SendProof(payload); err != nil {

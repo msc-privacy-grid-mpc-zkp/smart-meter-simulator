@@ -13,6 +13,7 @@ type ProofPayload struct {
 	Timestamp  int64  `json:"timestamp"`
 	MeterShare uint64 `json:"meter_share"`
 	Proof      []byte `json:"proof"`
+	Commitment []byte `json:"commitment"`
 }
 
 // SerializeProof converts a Groth16 proof into a byte slice for network transmission.
