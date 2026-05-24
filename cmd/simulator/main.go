@@ -93,6 +93,13 @@ func main() {
 		select {
 		case <-ticker.C:
 			fmt.Println("\n--- New synchronized reading cycle ---")
+			
+			// RED TEAM: Reset tamperedCount at the beginning of each cycle
+			// This ensures that exactly MaliciousTamperCount meters are tampered in EVERY cycle
+			if cfg.RedTeam.MaliciousTamperCount > 0 {
+				worker.ResetTamperedCount()
+			}
+			
 			for i, m := range meters {
 				pool.Jobs <- worker.Job{
 					MeterID: fmt.Sprintf("meter-RS-%03d", i+1),

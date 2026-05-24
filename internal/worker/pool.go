@@ -16,6 +16,13 @@ import (
 // Used for Test 1.2: Public Input Tampering with configurable meter count.
 var tamperedCount atomic.Int32
 
+// ResetTamperedCount resets the tamperedCount to 0.
+// This is called at the beginning of each synchronization cycle to ensure
+// that exactly MaliciousTamperCount meters are tampered in every cycle.
+func ResetTamperedCount() {
+	tamperedCount.Store(0)
+}
+
 // Job represents a single unit of work for the worker pool, containing
 // the meter identifier and its latest consumption reading.
 type Job struct {
