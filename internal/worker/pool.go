@@ -29,11 +29,12 @@ type Pool struct {
 	zkpEngine         *zkp.Engine
 	clients           []*network.Client
 	maliciousReplay   bool
+	maliciousTamper   bool
 }
 
 // NewPool initializes a new worker pool with the specified concurrency size,
 // job queue capacity, cryptographic engine, network clients, and red team flags.
-func NewPool(workerSize, queueSize int, maxLimit uint64, zkpEngine *zkp.Engine, clients []*network.Client, maliciousReplay bool) *Pool {
+func NewPool(workerSize, queueSize int, maxLimit uint64, zkpEngine *zkp.Engine, clients []*network.Client, maliciousReplay bool, maliciousTamper bool) *Pool {
 	return &Pool{
 		Jobs:              make(chan Job, queueSize),
 		wg:                &sync.WaitGroup{},
@@ -42,6 +43,7 @@ func NewPool(workerSize, queueSize int, maxLimit uint64, zkpEngine *zkp.Engine, 
 		zkpEngine:         zkpEngine,
 		clients:           clients,
 		maliciousReplay:   maliciousReplay,
+		maliciousTamper:   maliciousTamper,
 	}
 }
 
@@ -114,6 +116,13 @@ func (p *Pool) worker(id int) {
 					MeterShare: share,
 					Proof:      proofBytes,
 					Commitment: commitment,
+				}
+
+				// RED TEAM: Test 1.2 - Public Input Tampering
+				// If enabled, mutate the MeterID in the payload ONLY (proof remains valid for original meter)
+				if p.maliciousTamper {
+					payload.MeterID = payload.MeterID + "-FAKE"
+					log.Printf("[Worker %d] 🔴 RED TEAM: Tampering MeterID to %s (proof still bound to original meter)\n", id, payload.MeterID)
 				}
 
 				if err := cl.SendProof(payload); err != nil {

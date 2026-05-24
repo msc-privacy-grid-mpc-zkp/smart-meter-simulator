@@ -30,6 +30,7 @@ type AppConfig struct {
 
 	RedTeam struct {
 		MaliciousReplay bool `yaml:"malicious_replay" env:"MALICIOUS_REPLAY" env-default:"false"`
+		MaliciousTamper bool `yaml:"malicious_tamper" env:"MALICIOUS_TAMPER" env-default:"false"`
 	} `yaml:"red_team"`
 }
 

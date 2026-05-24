@@ -29,6 +29,7 @@ func main() {
 
 	// Parse CLI flags for red team testing
 	maliciousReplay := flag.Bool("malicious-replay", false, "Enable Replay Attack simulation (Test 1.1)")
+	maliciousTamper := flag.Bool("malicious-tamper", false, "Enable Public Input Tampering simulation (Test 1.2)")
 	flag.Parse()
 
 	cfg, err := config.LoadConfig()
@@ -36,10 +37,15 @@ func main() {
 		log.Fatalf("[FATAL] Error loading configuration: %v", err)
 	}
 
-	// Override config with CLI flag if provided
+	// Override config with CLI flags if provided
 	cfg.RedTeam.MaliciousReplay = *maliciousReplay
 	if cfg.RedTeam.MaliciousReplay {
 		log.Println("[RED TEAM] ⚠️  REPLAY ATTACK SIMULATION ENABLED (Test 1.1)")
+	}
+
+	cfg.RedTeam.MaliciousTamper = *maliciousTamper
+	if cfg.RedTeam.MaliciousTamper {
+		log.Println("[RED TEAM] ⚠️  PUBLIC INPUT TAMPERING SIMULATION ENABLED (Test 1.2)")
 	}
 
 	log.Println("[SETUP] Initializing ZKP Engine...")
@@ -71,6 +77,7 @@ func main() {
 		zkpEngine,
 		clients,
 		cfg.RedTeam.MaliciousReplay,
+		cfg.RedTeam.MaliciousTamper,
 	)
 	pool.Start()
 
