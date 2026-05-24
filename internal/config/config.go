@@ -31,6 +31,7 @@ type AppConfig struct {
 	RedTeam struct {
 		MaliciousReplay    bool `yaml:"malicious_replay" env:"MALICIOUS_REPLAY" env-default:"false"`
 		MaliciousTamperCount int `yaml:"malicious_tamper_count" env:"MALICIOUS_TAMPER_COUNT" env-default:"0"`
+		MaliciousNoise     bool `yaml:"malicious_noise" env:"MALICIOUS_NOISE" env-default:"false"`
 	} `yaml:"red_team"`
 }
 

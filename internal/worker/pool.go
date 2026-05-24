@@ -1,6 +1,7 @@
 package worker
 
 import (
+	"crypto/rand"
 	"fmt"
 	"log"
 	"sync"
@@ -42,11 +43,12 @@ type Pool struct {
 	clients                []*network.Client
 	maliciousReplay        bool
 	maliciousTamperCount   int
+	maliciousNoise         bool
 }
 
 // NewPool initializes a new worker pool with the specified concurrency size,
 // job queue capacity, cryptographic engine, network clients, and red team flags.
-func NewPool(workerSize, queueSize int, maxLimit uint64, zkpEngine *zkp.Engine, clients []*network.Client, maliciousReplay bool, maliciousTamperCount int) *Pool {
+func NewPool(workerSize, queueSize int, maxLimit uint64, zkpEngine *zkp.Engine, clients []*network.Client, maliciousReplay bool, maliciousTamperCount int, maliciousNoise bool) *Pool {
 	return &Pool{
 		Jobs:                   make(chan Job, queueSize),
 		wg:                     &sync.WaitGroup{},
@@ -56,6 +58,7 @@ func NewPool(workerSize, queueSize int, maxLimit uint64, zkpEngine *zkp.Engine, 
 		clients:                clients,
 		maliciousReplay:        maliciousReplay,
 		maliciousTamperCount:   maliciousTamperCount,
+		maliciousNoise:         maliciousNoise,
 	}
 }
 
@@ -96,6 +99,18 @@ func (p *Pool) worker(id int) {
 		if err != nil {
 			log.Printf("[Worker %d] Serialization Error for %s: %v\n", id, job.MeterID, err)
 			continue
+		}
+
+		// RED TEAM: Test 1.3 - Random Noise (Invalid Proof)
+		// If enabled, replace the valid proof with random garbage of the same length
+		if p.maliciousNoise {
+			randomNoise := make([]byte, len(proofBytes))
+			if _, err := rand.Read(randomNoise); err != nil {
+				log.Printf("[Worker %d] Failed to generate random noise for %s: %v\n", id, job.MeterID, err)
+				continue
+			}
+			proofBytes = randomNoise
+			log.Printf("[Worker %d] 🔴 RED TEAM: Injecting random noise (invalid proof) for meter %s\n", id, job.MeterID)
 		}
 
 		// 2. MPC Share Splitting
