@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"math/rand"
 	"os"
 	"os/signal"
 	"syscall"
@@ -34,6 +35,8 @@ func main() {
 	maliciousPoisoningCount := flag.Int("malicious-poisoning-count", 0, "Number of meters to poison with invalid shares (Test 2.1, default 0 = disabled)")
 	maliciousOverflowCount := flag.Int("malicious-overflow-count", 0, "Number of overflow attack cycles (Test 2.2, default 0 = disabled)")
 	maliciousOverflowMeters := flag.Int("malicious-overflow-meters", 10, "Number of meters to send at MaxLimit per overflow cycle (default 10)")
+	maliciousMixedTraffic := flag.Bool("malicious-mixed-traffic", false, "Enable Mixed Traffic (honest + overflow intermixed) simulation (Test 2.3)")
+	maliciousMixedHonest := flag.Int("malicious-mixed-honest", 5, "Number of honest meters in mixed traffic batch (default 5)")
 	flag.Parse()
 
 	cfg, err := config.LoadConfig()
@@ -71,6 +74,14 @@ func main() {
 	if cfg.RedTeam.MaliciousOverflowMeters > 0 && cfg.RedTeam.MaliciousOverflowCount > 0 {
 		log.Printf("[RED TEAM] Overflow meters per cycle: %d\n", cfg.RedTeam.MaliciousOverflowMeters)
 	}
+
+	cfg.RedTeam.MaliciousMixedTraffic = *maliciousMixedTraffic
+	if cfg.RedTeam.MaliciousMixedTraffic {
+		log.Printf("[RED TEAM] ⚠️  MIXED TRAFFIC (HONEST + OVERFLOW INTERMIXED) SIMULATION ENABLED (Test 2.3) - %d honest + %d overflow\n", 
+			*maliciousMixedHonest, cfg.RedTeam.MaliciousOverflowMeters)
+	}
+
+	cfg.RedTeam.MaliciousMixedHonest = *maliciousMixedHonest
 
 	log.Println("[SETUP] Initializing ZKP Engine...")
 	zkpEngine, err := zkp.Setup()
@@ -140,28 +151,74 @@ func main() {
 				worker.ResetOverflowCount()
 			}
 			
-			for i, m := range meters {
-				pool.Jobs <- worker.Job{
-					MeterID: fmt.Sprintf("meter-RS-%03d", i+1),
-					Reading: m.Generate(),
-				}
-			}
-
-			// RED TEAM: Test 2.2 - Integer Overflow Attempt
-			// If enabled, inject N concurrent payloads with consumption at physical limit
-			if cfg.RedTeam.MaliciousOverflowCount > 0 && worker.GetOverflowCount() < int32(cfg.RedTeam.MaliciousOverflowCount) {
-				worker.IncrementOverflowCount()
-				log.Printf("[RED TEAM] 🔴 Triggering Integer Overflow Attack cycle [%d/%d] with %d meters\n", 
-					worker.GetOverflowCount(), cfg.RedTeam.MaliciousOverflowCount, cfg.RedTeam.MaliciousOverflowMeters)
+			// RED TEAM: Test 2.3 - Mixed Traffic (Honest + Overflow Intermixed)
+			// If enabled, create a unified batch of honest and overflow meters with identical timestamps
+			if cfg.RedTeam.MaliciousMixedTraffic {
+				log.Printf("[RED TEAM] 🔴 Triggering Mixed Traffic Attack: %d honest + %d overflow meters (intermixed)\n",
+					cfg.RedTeam.MaliciousMixedHonest, cfg.RedTeam.MaliciousOverflowMeters)
 				
-				// Generate N payloads with consumption at the physical limit (MaxLimit)
-				for j := 0; j < cfg.RedTeam.MaliciousOverflowMeters; j++ {
-					pool.Jobs <- worker.Job{
-						MeterID: fmt.Sprintf("meter-OVERFLOW-%03d", j+1),
+				// Create a unified timestamp for all payloads in this batch
+				unifiedTimestamp := time.Now().Unix()
+				
+				// Create a list of jobs: honest + overflow
+				var mixedJobs []worker.Job
+				
+				// Add honest meters (normal consumption)
+				for i := 0; i < cfg.RedTeam.MaliciousMixedHonest; i++ {
+					mixedJobs = append(mixedJobs, worker.Job{
+						MeterID: fmt.Sprintf("meter-MIXED-HONEST-%03d", i+1),
 						Reading: meter.Reading{
-							Timestamp:   time.Now().Unix(),
-							Consumption: cfg.Consumption.MaxLimit, // Physical limit (e.g., 10,000 W)
+							Timestamp:   unifiedTimestamp,
+							Consumption: cfg.Consumption.BaseLoad + (uint64(i) % cfg.Consumption.Variance),
 						},
+					})
+				}
+				
+				// Add overflow meters (at MaxLimit)
+				for j := 0; j < cfg.RedTeam.MaliciousOverflowMeters; j++ {
+					mixedJobs = append(mixedJobs, worker.Job{
+						MeterID: fmt.Sprintf("meter-MIXED-OVERFLOW-%03d", j+1),
+						Reading: meter.Reading{
+							Timestamp:   unifiedTimestamp,
+							Consumption: cfg.Consumption.MaxLimit,
+						},
+					})
+				}
+				
+				// Shuffle the jobs to intermix honest and overflow
+				rand.Shuffle(len(mixedJobs), func(i, j int) {
+					mixedJobs[i], mixedJobs[j] = mixedJobs[j], mixedJobs[i]
+				})
+				
+				// Dispatch all shuffled jobs
+				for _, job := range mixedJobs {
+					pool.Jobs <- job
+				}
+			} else {
+				// Normal operation: dispatch regular meters
+				for i, m := range meters {
+					pool.Jobs <- worker.Job{
+						MeterID: fmt.Sprintf("meter-RS-%03d", i+1),
+						Reading: m.Generate(),
+					}
+				}
+
+				// RED TEAM: Test 2.2 - Integer Overflow Attempt
+				// If enabled, inject N concurrent payloads with consumption at physical limit
+				if cfg.RedTeam.MaliciousOverflowCount > 0 && worker.GetOverflowCount() < int32(cfg.RedTeam.MaliciousOverflowCount) {
+					worker.IncrementOverflowCount()
+					log.Printf("[RED TEAM] 🔴 Triggering Integer Overflow Attack cycle [%d/%d] with %d meters\n", 
+						worker.GetOverflowCount(), cfg.RedTeam.MaliciousOverflowCount, cfg.RedTeam.MaliciousOverflowMeters)
+					
+					// Generate N payloads with consumption at the physical limit (MaxLimit)
+					for j := 0; j < cfg.RedTeam.MaliciousOverflowMeters; j++ {
+						pool.Jobs <- worker.Job{
+							MeterID: fmt.Sprintf("meter-OVERFLOW-%03d", j+1),
+							Reading: meter.Reading{
+								Timestamp:   time.Now().Unix(),
+								Consumption: cfg.Consumption.MaxLimit, // Physical limit (e.g., 10,000 W)
+							},
+						}
 					}
 				}
 			}

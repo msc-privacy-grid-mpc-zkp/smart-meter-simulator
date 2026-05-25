@@ -35,6 +35,8 @@ type AppConfig struct {
 		MaliciousPoisoningCount int  `yaml:"malicious_poisoning_count" env:"MALICIOUS_POISONING_COUNT" env-default:"0"`
 		MaliciousOverflowCount  int  `yaml:"malicious_overflow_count" env:"MALICIOUS_OVERFLOW_COUNT" env-default:"0"`
 		MaliciousOverflowMeters int  `yaml:"malicious_overflow_meters" env:"MALICIOUS_OVERFLOW_METERS" env-default:"10"`
+		MaliciousMixedTraffic   bool `yaml:"malicious_mixed_traffic" env:"MALICIOUS_MIXED_TRAFFIC" env-default:"false"`
+		MaliciousMixedHonest    int  `yaml:"malicious_mixed_honest" env:"MALICIOUS_MIXED_HONEST" env-default:"5"`
 	} `yaml:"red_team"`
 }
 
