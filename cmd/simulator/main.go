@@ -78,7 +78,7 @@ func main() {
 
 	cfg.RedTeam.MaliciousMixedTraffic = *maliciousMixedTraffic
 	if cfg.RedTeam.MaliciousMixedTraffic {
-		log.Printf("[RED TEAM] ⚠️  MIXED TRAFFIC (HONEST + OVERFLOW INTERMIXED) SIMULATION ENABLED (Test 2.3) - %d honest + %d overflow\n", 
+		log.Printf("[RED TEAM] ⚠️  MIXED TRAFFIC (HONEST + OVERFLOW INTERMIXED) SIMULATION ENABLED (Test 2.3) - %d honest + %d overflow\n",
 			*maliciousMixedHonest, *maliciousMixedOverflow)
 	}
 
@@ -120,9 +120,6 @@ func main() {
 		cfg.RedTeam.MaliciousOverflowCount,
 		cfg.RedTeam.MaliciousOverflowMeters,
 	)
-	pool.MaliciousMixedTraffic = cfg.RedTeam.MaliciousMixedTraffic
-	pool.MaliciousMixedHonest = cfg.RedTeam.MaliciousMixedHonest
-	pool.MaliciousMixedOverflow = cfg.RedTeam.MaliciousMixedOverflow
 	pool.Start()
 
 	ticker := time.NewTicker(time.Duration(cfg.Simulation.IntervalSeconds) * time.Second)
@@ -137,7 +134,7 @@ func main() {
 		select {
 		case <-ticker.C:
 			fmt.Println("\n--- New synchronized reading cycle ---")
-			
+
 			// RED TEAM: Reset tamperedCount at the beginning of each cycle
 			// This ensures that exactly MaliciousTamperCount meters are tampered in EVERY cycle
 			if cfg.RedTeam.MaliciousTamperCount > 0 {
@@ -155,19 +152,19 @@ func main() {
 			if cfg.RedTeam.MaliciousOverflowCount > 0 {
 				worker.ResetOverflowCount()
 			}
-			
+
 			// RED TEAM: Test 2.3 - Mixed Traffic (Honest + Overflow Intermixed)
 			// If enabled, create a unified batch of honest and overflow meters with identical timestamps
 			if cfg.RedTeam.MaliciousMixedTraffic {
 				log.Printf("[RED TEAM] 🔴 Triggering Mixed Traffic Attack: %d honest + %d overflow meters (intermixed)\n",
 					cfg.RedTeam.MaliciousMixedHonest, cfg.RedTeam.MaliciousMixedOverflow)
-				
+
 				// Create a unified timestamp for all payloads in this batch
 				unifiedTimestamp := time.Now().Unix()
-				
+
 				// Create a list of jobs: honest + overflow
 				var mixedJobs []worker.Job
-				
+
 				// Add honest meters (normal consumption)
 				for i := 0; i < cfg.RedTeam.MaliciousMixedHonest; i++ {
 					mixedJobs = append(mixedJobs, worker.Job{
@@ -178,7 +175,7 @@ func main() {
 						},
 					})
 				}
-				
+
 				// Add overflow meters (at MaxLimit)
 				for j := 0; j < cfg.RedTeam.MaliciousMixedOverflow; j++ {
 					mixedJobs = append(mixedJobs, worker.Job{
@@ -189,12 +186,12 @@ func main() {
 						},
 					})
 				}
-				
+
 				// Shuffle the jobs to intermix honest and overflow
 				rand.Shuffle(len(mixedJobs), func(i, j int) {
 					mixedJobs[i], mixedJobs[j] = mixedJobs[j], mixedJobs[i]
 				})
-				
+
 				// Dispatch all shuffled jobs
 				for _, job := range mixedJobs {
 					pool.Jobs <- job
@@ -212,9 +209,9 @@ func main() {
 				// If enabled, inject N concurrent payloads with consumption at physical limit
 				if cfg.RedTeam.MaliciousOverflowCount > 0 && worker.GetOverflowCount() < int32(cfg.RedTeam.MaliciousOverflowCount) {
 					worker.IncrementOverflowCount()
-					log.Printf("[RED TEAM] 🔴 Triggering Integer Overflow Attack cycle [%d/%d] with %d meters\n", 
+					log.Printf("[RED TEAM] 🔴 Triggering Integer Overflow Attack cycle [%d/%d] with %d meters\n",
 						worker.GetOverflowCount(), cfg.RedTeam.MaliciousOverflowCount, cfg.RedTeam.MaliciousOverflowMeters)
-					
+
 					// Generate N payloads with consumption at the physical limit (MaxLimit)
 					for j := 0; j < cfg.RedTeam.MaliciousOverflowMeters; j++ {
 						pool.Jobs <- worker.Job{
@@ -229,7 +226,7 @@ func main() {
 			}
 		case sig := <-sigChan:
 			log.Printf("\n[SYSTEM] Received OS signal: %v. Initiating graceful shutdown...\n", sig)
-			
+
 			ticker.Stop()
 
 			close(pool.Jobs)
