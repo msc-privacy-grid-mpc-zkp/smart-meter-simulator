@@ -29,10 +29,11 @@ type AppConfig struct {
 	} `yaml:"consumption"`
 
 	RedTeam struct {
-		MaliciousReplay      bool `yaml:"malicious_replay" env:"MALICIOUS_REPLAY" env-default:"false"`
-		MaliciousTamperCount int  `yaml:"malicious_tamper_count" env:"MALICIOUS_TAMPER_COUNT" env-default:"0"`
-		MaliciousNoise       bool `yaml:"malicious_noise" env:"MALICIOUS_NOISE" env-default:"false"`
-		MaliciousPoisoningCount int `yaml:"malicious_poisoning_count" env:"MALICIOUS_POISONING_COUNT" env-default:"0"`
+		MaliciousReplay         bool `yaml:"malicious_replay" env:"MALICIOUS_REPLAY" env-default:"false"`
+		MaliciousTamperCount    int  `yaml:"malicious_tamper_count" env:"MALICIOUS_TAMPER_COUNT" env-default:"0"`
+		MaliciousNoise          bool `yaml:"malicious_noise" env:"MALICIOUS_NOISE" env-default:"false"`
+		MaliciousPoisoningCount int  `yaml:"malicious_poisoning_count" env:"MALICIOUS_POISONING_COUNT" env-default:"0"`
+		MaliciousOverflowCount  int  `yaml:"malicious_overflow_count" env:"MALICIOUS_OVERFLOW_COUNT" env-default:"0"`
 	} `yaml:"red_team"`
 }
 
