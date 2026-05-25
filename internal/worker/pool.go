@@ -1,6 +1,7 @@
 package worker
 
 import (
+	"crypto/rand"
 	"fmt"
 	"log"
 	"sync"
@@ -23,6 +24,17 @@ func ResetTamperedCount() {
 	tamperedCount.Store(0)
 }
 
+// poisonedCount tracks how many payloads have been poisoned with invalid shares.
+// Used for Test 2.1: Data Poisoning with configurable meter count.
+var poisonedCount atomic.Int32
+
+// ResetPoisonedCount resets the poisonedCount to 0.
+// This is called at the beginning of each synchronization cycle to ensure
+// that exactly MaliciousPoisoningCount meters are poisoned in every cycle.
+func ResetPoisonedCount() {
+	poisonedCount.Store(0)
+}
+
 // Job represents a single unit of work for the worker pool, containing
 // the meter identifier and its latest consumption reading.
 type Job struct {
@@ -34,28 +46,32 @@ type Job struct {
 // It handles Zero-Knowledge Proof generation, Multi-Party Computation share splitting,
 // and network dispatch to the aggregator nodes.
 type Pool struct {
-	Jobs                   chan Job
-	wg                     *sync.WaitGroup
-	workerSize             int
-	maxLimit               uint64
-	zkpEngine              *zkp.Engine
-	clients                []*network.Client
-	maliciousReplay        bool
-	maliciousTamperCount   int
+	Jobs                    chan Job
+	wg                      *sync.WaitGroup
+	workerSize              int
+	maxLimit                uint64
+	zkpEngine               *zkp.Engine
+	clients                 []*network.Client
+	maliciousReplay         bool
+	maliciousTamperCount    int
+	maliciousNoise          bool
+	maliciousPoisoningCount int
 }
 
 // NewPool initializes a new worker pool with the specified concurrency size,
 // job queue capacity, cryptographic engine, network clients, and red team flags.
-func NewPool(workerSize, queueSize int, maxLimit uint64, zkpEngine *zkp.Engine, clients []*network.Client, maliciousReplay bool, maliciousTamperCount int) *Pool {
+func NewPool(workerSize, queueSize int, maxLimit uint64, zkpEngine *zkp.Engine, clients []*network.Client, maliciousReplay bool, maliciousTamperCount int, maliciousNoise bool, maliciousPoisoningCount int) *Pool {
 	return &Pool{
-		Jobs:                   make(chan Job, queueSize),
-		wg:                     &sync.WaitGroup{},
-		workerSize:             workerSize,
-		maxLimit:               maxLimit,
-		zkpEngine:              zkpEngine,
-		clients:                clients,
-		maliciousReplay:        maliciousReplay,
-		maliciousTamperCount:   maliciousTamperCount,
+		Jobs:                    make(chan Job, queueSize),
+		wg:                      &sync.WaitGroup{},
+		workerSize:              workerSize,
+		maxLimit:                maxLimit,
+		zkpEngine:               zkpEngine,
+		clients:                 clients,
+		maliciousReplay:         maliciousReplay,
+		maliciousTamperCount:    maliciousTamperCount,
+		maliciousNoise:          maliciousNoise,
+		maliciousPoisoningCount: maliciousPoisoningCount,
 	}
 }
 
@@ -81,6 +97,17 @@ func (p *Pool) worker(id int) {
 
 	for job := range p.Jobs {
 		numericMeterID := crypto.HashStringToUint64(job.MeterID)
+		
+		// RED TEAM: Test 2.1 - Data Poisoning / Invalid Shares
+		// Determine if this meter should be poisoned
+		shouldPoison := false
+		if p.maliciousPoisoningCount > 0 && poisonedCount.Load() < int32(p.maliciousPoisoningCount) {
+			if poisonedCount.Add(1) <= int32(p.maliciousPoisoningCount) {
+				shouldPoison = true
+			}
+		}
+		
+		// Generate ZKP proof for the LEGITIMATE consumption (to bypass ZKP verification)
 		proof, commitment, err := p.zkpEngine.GenerateProof(
 			job.Reading.Consumption,
 			p.maxLimit,
@@ -98,9 +125,33 @@ func (p *Pool) worker(id int) {
 			continue
 		}
 
+		// RED TEAM: Test 1.3 - Random Noise (Invalid Proof)
+		// If enabled, replace the valid proof with random garbage of the same length
+		if p.maliciousNoise {
+			randomNoise := make([]byte, len(proofBytes))
+			if _, err := rand.Read(randomNoise); err != nil {
+				log.Printf("[Worker %d] Failed to generate random noise for %s: %v\n", id, job.MeterID, err)
+				continue
+			}
+			proofBytes = randomNoise
+			log.Printf("[Worker %d] 🔴 RED TEAM: Injecting random noise (invalid proof) for meter %s\n", id, job.MeterID)
+		}
+
 		// 2. MPC Share Splitting
 		// Originalna potrošnja sada ostaje uint64 (nema cast-ovanja)
 		actualConsumption := job.Reading.Consumption
+		
+		// RED TEAM: Test 2.1 - Data Poisoning / Invalid Shares
+		// If this meter is poisoned, use an extreme outlier value for share generation
+		// while keeping the ZKP proof valid for the legitimate consumption
+		consumptionForShares := actualConsumption
+		if shouldPoison {
+			// Use an extreme outlier value (999,999,999 Watts)
+			consumptionForShares = 999_999_999
+			log.Printf("[Worker %d] 🔴 RED TEAM: Poisoning meter %s with extreme value %d (ZKP proof valid for %d) [%d/%d]\n",
+				id, job.MeterID, consumptionForShares, actualConsumption, poisonedCount.Load(), p.maliciousPoisoningCount)
+		}
+		
 		shares := make([]uint64, numServers)
 		var sumOfShares uint64 = 0
 
@@ -109,7 +160,7 @@ func (p *Pool) worker(id int) {
 			sumOfShares += shares[i]
 		}
 		// Oduzimanje se sada automatski odvija po modulu 2^64
-		shares[numServers-1] = actualConsumption - sumOfShares
+		shares[numServers-1] = consumptionForShares - sumOfShares
 
 		var sendWg sync.WaitGroup
 		var mu sync.Mutex

@@ -30,6 +30,8 @@ func main() {
 	// Parse CLI flags for red team testing
 	maliciousReplay := flag.Bool("malicious-replay", false, "Enable Replay Attack simulation (Test 1.1)")
 	maliciousTamperCount := flag.Int("malicious-tamper-count", 0, "Number of meters to tamper (Test 1.2, default 0 = disabled)")
+	maliciousNoise := flag.Bool("malicious-noise", false, "Enable Random Noise (Invalid Proof) simulation (Test 1.3)")
+	maliciousPoisoningCount := flag.Int("malicious-poisoning-count", 0, "Number of meters to poison with invalid shares (Test 2.1, default 0 = disabled)")
 	flag.Parse()
 
 	cfg, err := config.LoadConfig()
@@ -46,6 +48,16 @@ func main() {
 	cfg.RedTeam.MaliciousTamperCount = *maliciousTamperCount
 	if cfg.RedTeam.MaliciousTamperCount > 0 {
 		log.Printf("[RED TEAM] ⚠️  PUBLIC INPUT TAMPERING SIMULATION ENABLED (Test 1.2) - Will tamper %d meter(s)\n", cfg.RedTeam.MaliciousTamperCount)
+	}
+
+	cfg.RedTeam.MaliciousNoise = *maliciousNoise
+	if cfg.RedTeam.MaliciousNoise {
+		log.Println("[RED TEAM] ⚠️  RANDOM NOISE (INVALID PROOF) SIMULATION ENABLED (Test 1.3)")
+	}
+
+	cfg.RedTeam.MaliciousPoisoningCount = *maliciousPoisoningCount
+	if cfg.RedTeam.MaliciousPoisoningCount > 0 {
+		log.Printf("[RED TEAM] ⚠️  DATA POISONING (INVALID SHARES) SIMULATION ENABLED (Test 2.1) - Will poison %d meter(s)\n", cfg.RedTeam.MaliciousPoisoningCount)
 	}
 
 	log.Println("[SETUP] Initializing ZKP Engine...")
@@ -78,6 +90,8 @@ func main() {
 		clients,
 		cfg.RedTeam.MaliciousReplay,
 		cfg.RedTeam.MaliciousTamperCount,
+		cfg.RedTeam.MaliciousNoise,
+		cfg.RedTeam.MaliciousPoisoningCount,
 	)
 	pool.Start()
 
@@ -98,6 +112,12 @@ func main() {
 			// This ensures that exactly MaliciousTamperCount meters are tampered in EVERY cycle
 			if cfg.RedTeam.MaliciousTamperCount > 0 {
 				worker.ResetTamperedCount()
+			}
+
+			// RED TEAM: Reset poisonedCount at the beginning of each cycle
+			// This ensures that exactly MaliciousPoisoningCount meters are poisoned in EVERY cycle
+			if cfg.RedTeam.MaliciousPoisoningCount > 0 {
+				worker.ResetPoisonedCount()
 			}
 			
 			for i, m := range meters {
