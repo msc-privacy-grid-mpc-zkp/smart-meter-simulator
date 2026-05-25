@@ -10,6 +10,7 @@ import (
 	"github.com/msc-privacy-grid-mpc-zkp/smart-meter-simulator/internal/meter"
 	"github.com/msc-privacy-grid-mpc-zkp/smart-meter-simulator/internal/network"
 	"github.com/msc-privacy-grid-mpc-zkp/smart-meter-simulator/internal/utils"
+	"github.com/msc-privacy-grid-mpc-zkp/smart-meter-simulator/internal/utils/crypto"
 	"github.com/msc-privacy-grid-mpc-zkp/smart-meter-simulator/internal/zkp"
 )
 
@@ -78,6 +79,9 @@ type Pool struct {
 	maliciousPoisoningCount  int
 	maliciousOverflowCount   int
 	maliciousOverflowMeters  int
+	maliciousMixedTraffic    bool
+	maliciousMixedHonest     int
+	maliciousMixedOverflow   int
 }
 
 // NewPool initializes a new worker pool with the specified concurrency size,
@@ -96,6 +100,9 @@ func NewPool(workerSize, queueSize int, maxLimit uint64, zkpEngine *zkp.Engine, 
 		maliciousPoisoningCount:  maliciousPoisoningCount,
 		maliciousOverflowCount:   maliciousOverflowCount,
 		maliciousOverflowMeters:  maliciousOverflowMeters,
+		maliciousMixedTraffic:    false,
+		maliciousMixedHonest:     5,
+		maliciousMixedOverflow:   5,
 	}
 }
 

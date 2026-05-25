@@ -120,6 +120,9 @@ func main() {
 		cfg.RedTeam.MaliciousOverflowCount,
 		cfg.RedTeam.MaliciousOverflowMeters,
 	)
+	pool.MaliciousMixedTraffic = cfg.RedTeam.MaliciousMixedTraffic
+	pool.MaliciousMixedHonest = cfg.RedTeam.MaliciousMixedHonest
+	pool.MaliciousMixedOverflow = cfg.RedTeam.MaliciousMixedOverflow
 	pool.Start()
 
 	ticker := time.NewTicker(time.Duration(cfg.Simulation.IntervalSeconds) * time.Second)
