@@ -37,6 +37,7 @@ type AppConfig struct {
 		MaliciousOverflowMeters int  `yaml:"malicious_overflow_meters" env:"MALICIOUS_OVERFLOW_METERS" env-default:"10"`
 		MaliciousMixedTraffic   bool `yaml:"malicious_mixed_traffic" env:"MALICIOUS_MIXED_TRAFFIC" env-default:"false"`
 		MaliciousMixedHonest    int  `yaml:"malicious_mixed_honest" env:"MALICIOUS_MIXED_HONEST" env-default:"5"`
+		MaliciousMixedOverflow  int  `yaml:"malicious_mixed_overflow" env:"MALICIOUS_MIXED_OVERFLOW" env-default:"5"`
 	} `yaml:"red_team"`
 }
 

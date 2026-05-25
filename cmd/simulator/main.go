@@ -37,6 +37,7 @@ func main() {
 	maliciousOverflowMeters := flag.Int("malicious-overflow-meters", 10, "Number of meters to send at MaxLimit per overflow cycle (default 10)")
 	maliciousMixedTraffic := flag.Bool("malicious-mixed-traffic", false, "Enable Mixed Traffic (honest + overflow intermixed) simulation (Test 2.3)")
 	maliciousMixedHonest := flag.Int("malicious-mixed-honest", 5, "Number of honest meters in mixed traffic batch (default 5)")
+	maliciousMixedOverflow := flag.Int("malicious-mixed-overflow", 5, "Number of overflow meters in mixed traffic batch (default 5)")
 	flag.Parse()
 
 	cfg, err := config.LoadConfig()
@@ -78,10 +79,11 @@ func main() {
 	cfg.RedTeam.MaliciousMixedTraffic = *maliciousMixedTraffic
 	if cfg.RedTeam.MaliciousMixedTraffic {
 		log.Printf("[RED TEAM] ⚠️  MIXED TRAFFIC (HONEST + OVERFLOW INTERMIXED) SIMULATION ENABLED (Test 2.3) - %d honest + %d overflow\n", 
-			*maliciousMixedHonest, cfg.RedTeam.MaliciousOverflowMeters)
+			*maliciousMixedHonest, *maliciousMixedOverflow)
 	}
 
 	cfg.RedTeam.MaliciousMixedHonest = *maliciousMixedHonest
+	cfg.RedTeam.MaliciousMixedOverflow = *maliciousMixedOverflow
 
 	log.Println("[SETUP] Initializing ZKP Engine...")
 	zkpEngine, err := zkp.Setup()
@@ -155,7 +157,7 @@ func main() {
 			// If enabled, create a unified batch of honest and overflow meters with identical timestamps
 			if cfg.RedTeam.MaliciousMixedTraffic {
 				log.Printf("[RED TEAM] 🔴 Triggering Mixed Traffic Attack: %d honest + %d overflow meters (intermixed)\n",
-					cfg.RedTeam.MaliciousMixedHonest, cfg.RedTeam.MaliciousOverflowMeters)
+					cfg.RedTeam.MaliciousMixedHonest, cfg.RedTeam.MaliciousMixedOverflow)
 				
 				// Create a unified timestamp for all payloads in this batch
 				unifiedTimestamp := time.Now().Unix()
@@ -175,7 +177,7 @@ func main() {
 				}
 				
 				// Add overflow meters (at MaxLimit)
-				for j := 0; j < cfg.RedTeam.MaliciousOverflowMeters; j++ {
+				for j := 0; j < cfg.RedTeam.MaliciousMixedOverflow; j++ {
 					mixedJobs = append(mixedJobs, worker.Job{
 						MeterID: fmt.Sprintf("meter-MIXED-OVERFLOW-%03d", j+1),
 						Reading: meter.Reading{
