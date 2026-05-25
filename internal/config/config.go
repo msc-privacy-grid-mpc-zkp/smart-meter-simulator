@@ -38,6 +38,9 @@ type AppConfig struct {
 		MaliciousMixedTraffic   bool `yaml:"malicious_mixed_traffic" env:"MALICIOUS_MIXED_TRAFFIC" env-default:"false"`
 		MaliciousMixedHonest    int  `yaml:"malicious_mixed_honest" env:"MALICIOUS_MIXED_HONEST" env-default:"5"`
 		MaliciousMixedOverflow  int  `yaml:"malicious_mixed_overflow" env:"MALICIOUS_MIXED_OVERFLOW" env-default:"5"`
+		SlowlorisEnabled        bool `yaml:"slowloris_enabled" env:"SLOWLORIS_ENABLED" env-default:"false"`
+		SlowlorisConnections    int  `yaml:"slowloris_connections" env:"SLOWLORIS_CONNECTIONS" env-default:"10"`
+		SlowlorisDelaySeconds   int  `yaml:"slowloris_delay_seconds" env:"SLOWLORIS_DELAY_SECONDS" env-default:"2"`
 	} `yaml:"red_team"`
 }
 

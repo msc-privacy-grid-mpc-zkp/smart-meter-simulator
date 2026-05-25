@@ -13,6 +13,7 @@ import (
 	"github.com/msc-privacy-grid-mpc-zkp/smart-meter-simulator/internal/config"
 	"github.com/msc-privacy-grid-mpc-zkp/smart-meter-simulator/internal/meter"
 	"github.com/msc-privacy-grid-mpc-zkp/smart-meter-simulator/internal/network"
+	"github.com/msc-privacy-grid-mpc-zkp/smart-meter-simulator/internal/simulator"
 	"github.com/msc-privacy-grid-mpc-zkp/smart-meter-simulator/internal/worker"
 	"github.com/msc-privacy-grid-mpc-zkp/smart-meter-simulator/internal/zkp"
 )
@@ -38,6 +39,9 @@ func main() {
 	maliciousMixedTraffic := flag.Bool("malicious-mixed-traffic", false, "Enable Mixed Traffic (honest + overflow intermixed) simulation (Test 2.3)")
 	maliciousMixedHonest := flag.Int("malicious-mixed-honest", 5, "Number of honest meters in mixed traffic batch (default 5)")
 	maliciousMixedOverflow := flag.Int("malicious-mixed-overflow", 5, "Number of overflow meters in mixed traffic batch (default 5)")
+	slowlorisEnabled := flag.Bool("slowloris", false, "Enable Slowloris DoS attack simulation (Test 3.1)")
+	slowlorisConnections := flag.Int("slowloris-connections", 10, "Number of slow connections to maintain (default 10)")
+	slowlorisDelaySeconds := flag.Int("slowloris-delay-seconds", 2, "Delay in seconds between sending bytes (default 2)")
 	flag.Parse()
 
 	cfg, err := config.LoadConfig()
@@ -85,6 +89,15 @@ func main() {
 	cfg.RedTeam.MaliciousMixedHonest = *maliciousMixedHonest
 	cfg.RedTeam.MaliciousMixedOverflow = *maliciousMixedOverflow
 
+	cfg.RedTeam.SlowlorisEnabled = *slowlorisEnabled
+	if cfg.RedTeam.SlowlorisEnabled {
+		log.Printf("[RED TEAM] ⚠️  SLOWLORIS DoS ATTACK SIMULATION ENABLED (Test 3.1) - %d connections with %d second delay\n",
+			*slowlorisConnections, *slowlorisDelaySeconds)
+	}
+
+	cfg.RedTeam.SlowlorisConnections = *slowlorisConnections
+	cfg.RedTeam.SlowlorisDelaySeconds = *slowlorisDelaySeconds
+
 	log.Println("[SETUP] Initializing ZKP Engine...")
 	zkpEngine, err := zkp.Setup()
 	if err != nil {
@@ -129,6 +142,20 @@ func main() {
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 
 	log.Println("[SYSTEM] Simulation running. Press Ctrl+C to stop.")
+
+	// RED TEAM: Test 3.1 - Slowloris DoS Attack
+	// If enabled, start the slowloris attack in a separate goroutine
+	if cfg.RedTeam.SlowlorisEnabled {
+		go func() {
+			time.Sleep(2 * time.Second) // Wait for aggregator to be ready
+			slowlorisAttack := simulator.NewSlowlorisAttack(
+				cfg.Network.AggregatorURLs[0],
+				cfg.RedTeam.SlowlorisConnections,
+				cfg.RedTeam.SlowlorisDelaySeconds,
+			)
+			slowlorisAttack.Start()
+		}()
+	}
 
 	for {
 		select {
