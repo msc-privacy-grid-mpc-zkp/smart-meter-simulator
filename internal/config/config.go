@@ -34,6 +34,7 @@ type AppConfig struct {
 		MaliciousNoise          bool `yaml:"malicious_noise" env:"MALICIOUS_NOISE" env-default:"false"`
 		MaliciousPoisoningCount int  `yaml:"malicious_poisoning_count" env:"MALICIOUS_POISONING_COUNT" env-default:"0"`
 		MaliciousOverflowCount  int  `yaml:"malicious_overflow_count" env:"MALICIOUS_OVERFLOW_COUNT" env-default:"0"`
+		MaliciousOverflowMeters int  `yaml:"malicious_overflow_meters" env:"MALICIOUS_OVERFLOW_METERS" env-default:"10"`
 	} `yaml:"red_team"`
 }
 

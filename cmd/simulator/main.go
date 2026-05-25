@@ -33,6 +33,7 @@ func main() {
 	maliciousNoise := flag.Bool("malicious-noise", false, "Enable Random Noise (Invalid Proof) simulation (Test 1.3)")
 	maliciousPoisoningCount := flag.Int("malicious-poisoning-count", 0, "Number of meters to poison with invalid shares (Test 2.1, default 0 = disabled)")
 	maliciousOverflowCount := flag.Int("malicious-overflow-count", 0, "Number of overflow attack cycles (Test 2.2, default 0 = disabled)")
+	maliciousOverflowMeters := flag.Int("malicious-overflow-meters", 10, "Number of meters to send at MaxLimit per overflow cycle (default 10)")
 	flag.Parse()
 
 	cfg, err := config.LoadConfig()
@@ -64,6 +65,11 @@ func main() {
 	cfg.RedTeam.MaliciousOverflowCount = *maliciousOverflowCount
 	if cfg.RedTeam.MaliciousOverflowCount > 0 {
 		log.Printf("[RED TEAM] ⚠️  INTEGER OVERFLOW ATTEMPT SIMULATION ENABLED (Test 2.2) - Will trigger %d overflow cycle(s)\n", cfg.RedTeam.MaliciousOverflowCount)
+	}
+
+	cfg.RedTeam.MaliciousOverflowMeters = *maliciousOverflowMeters
+	if cfg.RedTeam.MaliciousOverflowMeters > 0 && cfg.RedTeam.MaliciousOverflowCount > 0 {
+		log.Printf("[RED TEAM] Overflow meters per cycle: %d\n", cfg.RedTeam.MaliciousOverflowMeters)
 	}
 
 	log.Println("[SETUP] Initializing ZKP Engine...")
@@ -99,6 +105,7 @@ func main() {
 		cfg.RedTeam.MaliciousNoise,
 		cfg.RedTeam.MaliciousPoisoningCount,
 		cfg.RedTeam.MaliciousOverflowCount,
+		cfg.RedTeam.MaliciousOverflowMeters,
 	)
 	pool.Start()
 
@@ -141,13 +148,14 @@ func main() {
 			}
 
 			// RED TEAM: Test 2.2 - Integer Overflow Attempt
-			// If enabled, inject 10+ concurrent payloads with consumption at physical limit
+			// If enabled, inject N concurrent payloads with consumption at physical limit
 			if cfg.RedTeam.MaliciousOverflowCount > 0 && worker.GetOverflowCount() < int32(cfg.RedTeam.MaliciousOverflowCount) {
 				worker.IncrementOverflowCount()
-				log.Printf("[RED TEAM] 🔴 Triggering Integer Overflow Attack cycle [%d/%d]\n", worker.GetOverflowCount(), cfg.RedTeam.MaliciousOverflowCount)
+				log.Printf("[RED TEAM] 🔴 Triggering Integer Overflow Attack cycle [%d/%d] with %d meters\n", 
+					worker.GetOverflowCount(), cfg.RedTeam.MaliciousOverflowCount, cfg.RedTeam.MaliciousOverflowMeters)
 				
-				// Generate 10+ payloads with consumption at the physical limit (MaxLimit)
-				for j := 0; j < 10; j++ {
+				// Generate N payloads with consumption at the physical limit (MaxLimit)
+				for j := 0; j < cfg.RedTeam.MaliciousOverflowMeters; j++ {
 					pool.Jobs <- worker.Job{
 						MeterID: fmt.Sprintf("meter-OVERFLOW-%03d", j+1),
 						Reading: meter.Reading{

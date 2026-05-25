@@ -66,34 +66,36 @@ type Job struct {
 // It handles Zero-Knowledge Proof generation, Multi-Party Computation share splitting,
 // and network dispatch to the aggregator nodes.
 type Pool struct {
-	Jobs                    chan Job
-	wg                      *sync.WaitGroup
-	workerSize              int
-	maxLimit                uint64
-	zkpEngine               *zkp.Engine
-	clients                 []*network.Client
-	maliciousReplay         bool
-	maliciousTamperCount    int
-	maliciousNoise          bool
-	maliciousPoisoningCount int
-	maliciousOverflowCount  int
+	Jobs                     chan Job
+	wg                       *sync.WaitGroup
+	workerSize               int
+	maxLimit                 uint64
+	zkpEngine                *zkp.Engine
+	clients                  []*network.Client
+	maliciousReplay          bool
+	maliciousTamperCount     int
+	maliciousNoise           bool
+	maliciousPoisoningCount  int
+	maliciousOverflowCount   int
+	maliciousOverflowMeters  int
 }
 
 // NewPool initializes a new worker pool with the specified concurrency size,
 // job queue capacity, cryptographic engine, network clients, and red team flags.
-func NewPool(workerSize, queueSize int, maxLimit uint64, zkpEngine *zkp.Engine, clients []*network.Client, maliciousReplay bool, maliciousTamperCount int, maliciousNoise bool, maliciousPoisoningCount int, maliciousOverflowCount int) *Pool {
+func NewPool(workerSize, queueSize int, maxLimit uint64, zkpEngine *zkp.Engine, clients []*network.Client, maliciousReplay bool, maliciousTamperCount int, maliciousNoise bool, maliciousPoisoningCount int, maliciousOverflowCount int, maliciousOverflowMeters int) *Pool {
 	return &Pool{
-		Jobs:                    make(chan Job, queueSize),
-		wg:                      &sync.WaitGroup{},
-		workerSize:              workerSize,
-		maxLimit:                maxLimit,
-		zkpEngine:               zkpEngine,
-		clients:                 clients,
-		maliciousReplay:         maliciousReplay,
-		maliciousTamperCount:    maliciousTamperCount,
-		maliciousNoise:          maliciousNoise,
-		maliciousPoisoningCount: maliciousPoisoningCount,
-		maliciousOverflowCount:  maliciousOverflowCount,
+		Jobs:                     make(chan Job, queueSize),
+		wg:                       &sync.WaitGroup{},
+		workerSize:               workerSize,
+		maxLimit:                 maxLimit,
+		zkpEngine:                zkpEngine,
+		clients:                  clients,
+		maliciousReplay:          maliciousReplay,
+		maliciousTamperCount:     maliciousTamperCount,
+		maliciousNoise:           maliciousNoise,
+		maliciousPoisoningCount:  maliciousPoisoningCount,
+		maliciousOverflowCount:   maliciousOverflowCount,
+		maliciousOverflowMeters:  maliciousOverflowMeters,
 	}
 }
 
