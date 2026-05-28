@@ -35,6 +35,26 @@ func ResetPoisonedCount() {
 	poisonedCount.Store(0)
 }
 
+// overflowCount tracks how many overflow attack cycles have been triggered.
+// Used for Test 2.2: Integer Overflow Attempt with configurable cycle count.
+var overflowCount atomic.Int32
+
+// ResetOverflowCount resets the overflowCount to 0.
+// This is called at the beginning of each synchronization cycle.
+func ResetOverflowCount() {
+	overflowCount.Store(0)
+}
+
+// GetOverflowCount returns the current overflow cycle count.
+func GetOverflowCount() int32 {
+	return overflowCount.Load()
+}
+
+// IncrementOverflowCount increments the overflow cycle counter.
+func IncrementOverflowCount() {
+	overflowCount.Add(1)
+}
+
 // Job represents a single unit of work for the worker pool, containing
 // the meter identifier and its latest consumption reading.
 type Job struct {
@@ -56,11 +76,13 @@ type Pool struct {
 	maliciousTamperCount    int
 	maliciousNoise          bool
 	maliciousPoisoningCount int
+	maliciousOverflowCount  int
+	maliciousOverflowMeters int
 }
 
 // NewPool initializes a new worker pool with the specified concurrency size,
 // job queue capacity, cryptographic engine, network clients, and red team flags.
-func NewPool(workerSize, queueSize int, maxLimit uint64, zkpEngine *zkp.Engine, clients []*network.Client, maliciousReplay bool, maliciousTamperCount int, maliciousNoise bool, maliciousPoisoningCount int) *Pool {
+func NewPool(workerSize, queueSize int, maxLimit uint64, zkpEngine *zkp.Engine, clients []*network.Client, maliciousReplay bool, maliciousTamperCount int, maliciousNoise bool, maliciousPoisoningCount int, maliciousOverflowCount int, maliciousOverflowMeters int) *Pool {
 	return &Pool{
 		Jobs:                    make(chan Job, queueSize),
 		wg:                      &sync.WaitGroup{},
@@ -72,6 +94,8 @@ func NewPool(workerSize, queueSize int, maxLimit uint64, zkpEngine *zkp.Engine, 
 		maliciousTamperCount:    maliciousTamperCount,
 		maliciousNoise:          maliciousNoise,
 		maliciousPoisoningCount: maliciousPoisoningCount,
+		maliciousOverflowCount:  maliciousOverflowCount,
+		maliciousOverflowMeters: maliciousOverflowMeters,
 	}
 }
 
@@ -97,7 +121,7 @@ func (p *Pool) worker(id int) {
 
 	for job := range p.Jobs {
 		numericMeterID := crypto.HashStringToUint64(job.MeterID)
-		
+
 		// RED TEAM: Test 2.1 - Data Poisoning / Invalid Shares
 		// Determine if this meter should be poisoned
 		shouldPoison := false
@@ -106,7 +130,7 @@ func (p *Pool) worker(id int) {
 				shouldPoison = true
 			}
 		}
-		
+
 		// Generate ZKP proof for the LEGITIMATE consumption (to bypass ZKP verification)
 		proof, commitment, err := p.zkpEngine.GenerateProof(
 			job.Reading.Consumption,
@@ -140,7 +164,7 @@ func (p *Pool) worker(id int) {
 		// 2. MPC Share Splitting
 		// Originalna potrošnja sada ostaje uint64 (nema cast-ovanja)
 		actualConsumption := job.Reading.Consumption
-		
+
 		// RED TEAM: Test 2.1 - Data Poisoning / Invalid Shares
 		// If this meter is poisoned, use an extreme outlier value for share generation
 		// while keeping the ZKP proof valid for the legitimate consumption
@@ -151,7 +175,7 @@ func (p *Pool) worker(id int) {
 			log.Printf("[Worker %d] 🔴 RED TEAM: Poisoning meter %s with extreme value %d (ZKP proof valid for %d) [%d/%d]\n",
 				id, job.MeterID, consumptionForShares, actualConsumption, poisonedCount.Load(), p.maliciousPoisoningCount)
 		}
-		
+
 		shares := make([]uint64, numServers)
 		var sumOfShares uint64 = 0
 
@@ -187,7 +211,7 @@ func (p *Pool) worker(id int) {
 				if p.maliciousTamperCount > 0 && tamperedCount.Load() < int32(p.maliciousTamperCount) {
 					if tamperedCount.Add(1) <= int32(p.maliciousTamperCount) {
 						payload.MeterID = payload.MeterID + "-FAKE"
-						log.Printf("[Worker %d] 🔴 RED TEAM: Tampering MeterID to %s (proof still bound to original meter) [%d/%d]\n", 
+						log.Printf("[Worker %d] 🔴 RED TEAM: Tampering MeterID to %s (proof still bound to original meter) [%d/%d]\n",
 							id, payload.MeterID, tamperedCount.Load(), p.maliciousTamperCount)
 					}
 				}
@@ -204,15 +228,22 @@ func (p *Pool) worker(id int) {
 		sendWg.Wait()
 
 		if allSuccess {
-			fmt.Printf("[Worker %d] ✅ ZKP+MPC Dispatched | Meter: %s | Nodes: %d | Val: %dW\n",
-				id, job.MeterID, numServers, actualConsumption)
+			// Check if this is an overflow attack meter
+			isOverflowMeter := len(job.MeterID) > 14 && job.MeterID[:14] == "meter-OVERFLOW"
+			if isOverflowMeter {
+				fmt.Printf("[Worker %d] 🔴 OVERFLOW ATTACK | Meter: %s | Nodes: %d | Val: %dW (at physical limit)\n",
+					id, job.MeterID, numServers, actualConsumption)
+			} else {
+				fmt.Printf("[Worker %d] ✅ ZKP+MPC Dispatched | Meter: %s | Nodes: %d | Val: %dW\n",
+					id, job.MeterID, numServers, actualConsumption)
+			}
 		}
 
 		// RED TEAM: Test 1.1 - Replay Attack Simulation
 		// If enabled, immediately resend the EXACT same payload without regenerating proof or updating timestamp
 		if p.maliciousReplay && allSuccess {
 			log.Printf("[Worker %d] 🔴 RED TEAM: Initiating Replay Attack for meter %s\n", id, job.MeterID)
-			
+
 			var replayWg sync.WaitGroup
 			var replayMu sync.Mutex
 			replaySuccess := true

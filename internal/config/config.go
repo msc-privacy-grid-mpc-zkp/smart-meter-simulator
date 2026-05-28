@@ -29,10 +29,18 @@ type AppConfig struct {
 	} `yaml:"consumption"`
 
 	RedTeam struct {
-		MaliciousReplay      bool `yaml:"malicious_replay" env:"MALICIOUS_REPLAY" env-default:"false"`
-		MaliciousTamperCount int  `yaml:"malicious_tamper_count" env:"MALICIOUS_TAMPER_COUNT" env-default:"0"`
-		MaliciousNoise       bool `yaml:"malicious_noise" env:"MALICIOUS_NOISE" env-default:"false"`
-		MaliciousPoisoningCount int `yaml:"malicious_poisoning_count" env:"MALICIOUS_POISONING_COUNT" env-default:"0"`
+		MaliciousReplay         bool `yaml:"malicious_replay" env:"MALICIOUS_REPLAY" env-default:"false"`
+		MaliciousTamperCount    int  `yaml:"malicious_tamper_count" env:"MALICIOUS_TAMPER_COUNT" env-default:"0"`
+		MaliciousNoise          bool `yaml:"malicious_noise" env:"MALICIOUS_NOISE" env-default:"false"`
+		MaliciousPoisoningCount int  `yaml:"malicious_poisoning_count" env:"MALICIOUS_POISONING_COUNT" env-default:"0"`
+		MaliciousOverflowCount  int  `yaml:"malicious_overflow_count" env:"MALICIOUS_OVERFLOW_COUNT" env-default:"0"`
+		MaliciousOverflowMeters int  `yaml:"malicious_overflow_meters" env:"MALICIOUS_OVERFLOW_METERS" env-default:"10"`
+		MaliciousMixedTraffic   bool `yaml:"malicious_mixed_traffic" env:"MALICIOUS_MIXED_TRAFFIC" env-default:"false"`
+		MaliciousMixedHonest    int  `yaml:"malicious_mixed_honest" env:"MALICIOUS_MIXED_HONEST" env-default:"5"`
+		MaliciousMixedOverflow  int  `yaml:"malicious_mixed_overflow" env:"MALICIOUS_MIXED_OVERFLOW" env-default:"5"`
+		SlowlorisEnabled        bool `yaml:"slowloris_enabled" env:"SLOWLORIS_ENABLED" env-default:"false"`
+		SlowlorisConnections    int  `yaml:"slowloris_connections" env:"SLOWLORIS_CONNECTIONS" env-default:"10"`
+		SlowlorisDelaySeconds   int  `yaml:"slowloris_delay_seconds" env:"SLOWLORIS_DELAY_SECONDS" env-default:"2"`
 	} `yaml:"red_team"`
 }
 
@@ -41,7 +49,11 @@ type AppConfig struct {
 // It enforces minimum safety bounds for critical simulation parameters.
 func LoadConfig() (*AppConfig, error) {
 	configPath := flag.String("config", defaultConfigFile, "Path to the YAML configuration file")
-	flag.Parse()
+	
+	// Only parse flags if they haven't been parsed yet
+	if !flag.Parsed() {
+		flag.Parse()
+	}
 
 	var cfg AppConfig
 
