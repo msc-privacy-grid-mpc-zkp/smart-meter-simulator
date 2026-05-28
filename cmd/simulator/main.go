@@ -29,7 +29,7 @@ func main() {
 	fmt.Println("⚡ Starting Edge Simulator (Multi-Node MPC ready)...")
 	fmt.Println("---------------------------------------------------------")
 
-	// Parse CLI flags for red team testing
+	// Define CLI flags for red team testing BEFORE parsing
 	maliciousReplay := flag.Bool("malicious-replay", false, "Enable Replay Attack simulation (Test 1.1)")
 	maliciousTamperCount := flag.Int("malicious-tamper-count", 0, "Number of meters to tamper (Test 1.2, default 0 = disabled)")
 	maliciousNoise := flag.Bool("malicious-noise", false, "Enable Random Noise (Invalid Proof) simulation (Test 1.3)")
@@ -42,8 +42,11 @@ func main() {
 	slowlorisEnabled := flag.Bool("slowloris", false, "Enable Slowloris DoS attack simulation (Test 3.1)")
 	slowlorisConnections := flag.Int("slowloris-connections", 10, "Number of slow connections to maintain (default 10)")
 	slowlorisDelaySeconds := flag.Int("slowloris-delay-seconds", 2, "Delay in seconds between sending bytes (default 2)")
+
+	// Parse all flags NOW
 	flag.Parse()
 
+	// Load config AFTER parsing flags
 	cfg, err := config.LoadConfig()
 	if err != nil {
 		log.Fatalf("[FATAL] Error loading configuration: %v", err)

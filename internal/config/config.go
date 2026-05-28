@@ -49,7 +49,11 @@ type AppConfig struct {
 // It enforces minimum safety bounds for critical simulation parameters.
 func LoadConfig() (*AppConfig, error) {
 	configPath := flag.String("config", defaultConfigFile, "Path to the YAML configuration file")
-	flag.Parse()
+	
+	// Only parse flags if they haven't been parsed yet
+	if !flag.Parsed() {
+		flag.Parse()
+	}
 
 	var cfg AppConfig
 
