@@ -2,22 +2,20 @@ package crypto
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/binary"
-	"hash/fnv"
 	"math/big"
 )
 
 // HashStringToUint64 deterministically hashes a string identifier into a uint64
-// using the FNV-1a algorithm. It is safe to use for generating ZKP public inputs
-// and ensures consistent mapping of meter IDs across the system.
+// using a truncated SHA-256 (first 8 bytes of the 32-byte sum) and
+// binary.BigEndian.Uint64 to produce a secure, deterministic mapping.
+// NOTE: This replaces the previous non-cryptographic FNV implementation and
+// will change numeric outputs; coordinate with downstream systems if needed.
 func HashStringToUint64(s string) uint64 {
-	h := fnv.New64a()
-
-	// Explicitly ignoring the return values (int, error) to satisfy strict linters,
-	// since the standard library's FNV-1a Write method never returns an error.
-	_, _ = h.Write([]byte(s))
-
-	return h.Sum64()
+	// Compute SHA-256 and take the first 8 bytes (big-endian) for uint64
+	sum := sha256.Sum256([]byte(s))
+	return binary.BigEndian.Uint64(sum[:8])
 }
 
 // TODO: Delete (depricated)
