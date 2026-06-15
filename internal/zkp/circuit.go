@@ -18,7 +18,9 @@ type RangeProofCircuit struct {
 // Define declares the circuit's constraints to the gnark compiler, including
 // the range check and the cryptographic binding of the public parameters.
 func (circuit *RangeProofCircuit) Define(api frontend.API) error {
-	api.ToBinary(circuit.MaxLimit, 32)
+	// Enforce 64-bit decomposition for MaxLimit and Consumption to match uint64 semantics
+	api.ToBinary(circuit.MaxLimit, 64)
+	api.ToBinary(circuit.Consumption, 64)
 	api.AssertIsLessOrEqual(circuit.Consumption, circuit.MaxLimit)
 
 	// Kreiraj MiMC za krug
